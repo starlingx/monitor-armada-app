@@ -370,6 +370,7 @@ data:
     files:
       kibana.yml:
         elasticsearch.hosts: http://stx-elasticsearch-client:9200
+        server.host: "::"
     nodeSelector:
       elastic-controller: "enabled"
   source:
@@ -425,14 +426,14 @@ data:
             elasticsearch {
               hosts => ["${ELASTICSEARCH_HOST}:${ELASTICSEARCH_PORT}${ELASTICSEARCH_PATH}"]
               manage_template => false
-              index => "collectd"
+              index => "collectd-%{+YYYY.MM.dd}"
             }
           }
           if [type] == "beats" {
             elasticsearch {
               hosts => ["${ELASTICSEARCH_HOST}:${ELASTICSEARCH_PORT}${ELASTICSEARCH_PATH}"]
               manage_template => false
-              index => "%{[@metadata][beat]}-%{[@metadata][version]}"
+              index => "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
             }
           }
         }
@@ -442,6 +443,7 @@ data:
           udp {
             #Note default port 25826 in use by influxdb.
             #port => 25826
+            host => "::"
             port => 31005
             buffer_size => 1452
             codec => collectd { }
