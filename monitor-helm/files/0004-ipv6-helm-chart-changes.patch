@@ -1,0 +1,267 @@
+From 33fc3cb13670c8e76e7a93455865c81b9f13b0e0 Mon Sep 17 00:00:00 2001
+From: Kevin Smith <kevin.smith@windriver.com>
+Date: Tue, 3 Sep 2019 10:43:50 -0400
+Subject: [PATCH 1/1] ipv6 helm chart changes
+
+---
+ .../elasticsearch/templates/client-deployment.yaml |  2 +-
+ .../elasticsearch/templates/data-statefulset.yaml  |  2 +-
+ .../templates/master-statefulset.yaml              |  2 +-
+ stable/filebeat/templates/configmap.yaml           | 47 +++++++++++++++++-----
+ stable/filebeat/templates/daemonset.yaml           | 21 ++++++++++
+ stable/metricbeat/templates/configmap.yaml         | 47 +++++++++++++++++-----
+ stable/metricbeat/templates/daemonset.yaml         | 21 ++++++++++
+ 7 files changed, 119 insertions(+), 23 deletions(-)
+
+diff --git a/stable/elasticsearch/templates/client-deployment.yaml b/stable/elasticsearch/templates/client-deployment.yaml
+index 047e3c8..5625ee0 100644
+--- a/stable/elasticsearch/templates/client-deployment.yaml
++++ b/stable/elasticsearch/templates/client-deployment.yaml
+@@ -102,7 +102,7 @@ spec:
+             resourceFieldRef:
+               resource: limits.cpu
+         - name: ES_JAVA_OPTS
+-          value: "-Djava.net.preferIPv4Stack=true -Xms{{ .Values.client.heapSize }} -Xmx{{ .Values.client.heapSize }} {{ .Values.cluster.additionalJavaOpts }} {{ .Values.client.additionalJavaOpts }}"
++          value: "-Djava.net.preferIPv6Addresses=true -Xms{{ .Values.client.heapSize }} -Xmx{{ .Values.client.heapSize }} {{ .Values.cluster.additionalJavaOpts }} {{ .Values.client.additionalJavaOpts }}"
+         {{- range $key, $value :=  .Values.cluster.env }}
+         - name: {{ $key }}
+           value: {{ $value | quote }}
+diff --git a/stable/elasticsearch/templates/data-statefulset.yaml b/stable/elasticsearch/templates/data-statefulset.yaml
+index a407803..44b6be1 100644
+--- a/stable/elasticsearch/templates/data-statefulset.yaml
++++ b/stable/elasticsearch/templates/data-statefulset.yaml
+@@ -120,7 +120,7 @@ spec:
+             resourceFieldRef:
+               resource: limits.cpu
+         - name: ES_JAVA_OPTS
+-          value: "-Djava.net.preferIPv4Stack=true -Xms{{ .Values.data.heapSize }} -Xmx{{ .Values.data.heapSize }} {{ .Values.cluster.additionalJavaOpts }} {{ .Values.data.additionalJavaOpts }}"
++          value: "-Djava.net.preferIPv6Addresses=true -Xms{{ .Values.data.heapSize }} -Xmx{{ .Values.data.heapSize }} {{ .Values.cluster.additionalJavaOpts }} {{ .Values.data.additionalJavaOpts }}"
+         {{- range $key, $value :=  .Values.cluster.env }}
+         - name: {{ $key }}
+           value: {{ $value | quote }}
+diff --git a/stable/elasticsearch/templates/master-statefulset.yaml b/stable/elasticsearch/templates/master-statefulset.yaml
+index 048535c..7c48fe3 100644
+--- a/stable/elasticsearch/templates/master-statefulset.yaml
++++ b/stable/elasticsearch/templates/master-statefulset.yaml
+@@ -124,7 +124,7 @@ spec:
+             resourceFieldRef:
+               resource: limits.cpu
+         - name: ES_JAVA_OPTS
+-          value: "-Djava.net.preferIPv4Stack=true -Xms{{ .Values.master.heapSize }} -Xmx{{ .Values.master.heapSize }} {{ .Values.cluster.additionalJavaOpts }} {{ .Values.master.additionalJavaOpts }}"
++          value: "-Djava.net.preferIPv6Addresses=true -Xms{{ .Values.master.heapSize }} -Xmx{{ .Values.master.heapSize }} {{ .Values.cluster.additionalJavaOpts }} {{ .Values.master.additionalJavaOpts }}"
+         {{- range $key, $value :=  .Values.cluster.env }}
+         - name: {{ $key }}
+           value: {{ $value | quote }}
+diff --git a/stable/filebeat/templates/configmap.yaml b/stable/filebeat/templates/configmap.yaml
+index c895965..9433176 100644
+--- a/stable/filebeat/templates/configmap.yaml
++++ b/stable/filebeat/templates/configmap.yaml
+@@ -10,8 +10,41 @@ metadata:
+ data:
+   setup-script.sh: |-
+     #!/bin/bash
++    #
++    # This is best effort to load the template into elasticsearch
++    # if beats are going to elasticsearch via logstash.
++    #
+     BEAT='filebeat'
+     BEAT_VER=$($BEAT version | awk '{print $3}')
++
++    ADDR=$OUTPUT_ELASTICSEARCH_HOSTS
++    echo $ADDR
++
++    # Check if this is a map of entries.  If so, we'll only export the template
++    # to the first address
++    if [[ ${ADDR:0:1} == [ ]]; then
++       # Remove the square brackets
++       ADDR=${ADDR:1:-1}
++       # Take the first entry in case there are more than one
++       ADDR=${ADDR%%,*}
++    fi
++    echo $ADDR
++
++    # Check if user has formatted with http:// on front, if not we need to add
++    HTTP='http://'
++    if [[ ${ADDR} == http* ]]; then
++       HTTP=''
++    fi
++    echo $HTTP
++
++    # Check for ip address containing special characters where -g must be used in curl command
++    # IPV6 Addresses should come in with square braces around the address.
++    CURL_G=''
++    if [[ ${ADDR} == *[* ]]; then
++       CURL_G=' -g  '
++    fi
++    echo $CURL_G
++
+     # check if logstash output is enabled, via crude parsing of the .yml file.
+     sed -e '/output.logstash/,/enabled:/!d' ${BEAT}.yml  | grep -i true
+     if [[ $? -eq 0 ]]; then
+@@ -20,15 +53,9 @@ data:
+        # remove the lifecycle section of the yaml, as elasticsearch will choke
+        # on it as oss version does not support ilm.
+        sed -i '/lifecycle/,+3d' /tmp/beat.template.json
+-       curl -XPUT -H "Content-Type: application/json" http://{$STX_ELASTICSEARCH_CLIENT_SERVICE_HOST}:{$STX_ELASTICSEARCH_CLIENT_SERVICE_PORT_HTTP}/_template/{$BEAT}-{$BEAT_VER} -d@/tmp/beat.template.json
+-       # prime the index as a write index
+-       curl -XPUT -H "Content-Type: application/json" -d   "{
+-          \"aliases\": {
+-             \"{BEAT}-{$BEAT_VER}\": {
+-                \"is_write_index\": \"true\"
+-             }
+-          }
+-       }" http://{$STX_ELASTICSEARCH_CLIENT_SERVICE_HOST}:{$STX_ELASTICSEARCH_CLIENT_SERVICE_PORT_HTTP}/{$BEAT}-{$BEAT_VER}-000001
++       curl -v $CURL_G -XPUT -H "Content-Type: application/json" $HTTP$ADDR/_template/$BEAT-$BEAT_VER -d@/tmp/beat.template.json
+     else
+-        echo "logstash not configured, not exporting template, should be done for us."
++       echo "logstash not configured, not exporting template, should be done for us."
+     fi
++    # Above is non-fatal if there is a problem.  Always pass.
++    exit 0
+diff --git a/stable/filebeat/templates/daemonset.yaml b/stable/filebeat/templates/daemonset.yaml
+index 00a5519..b8536fb 100644
+--- a/stable/filebeat/templates/daemonset.yaml
++++ b/stable/filebeat/templates/daemonset.yaml
+@@ -53,6 +53,17 @@ spec:
+           mountPath: /usr/share/filebeat/filebeat.yml
+           readOnly: true
+           subPath: filebeat.yml
++        env:
++      ## make output.elasticsearch parms visible
++      {{- range $key, $value := .Values.config}}
++      {{- $configname := $key | upper | replace "." "_" -}}
++      {{ if eq $configname "OUTPUT_ELASTICSEARCH" -}}
++      {{- range $key2, $value2 := $value}}
++        - name: "{{ $configname }}_{{ $key2 | upper }}"
++          value: {{ $value2 | quote }}
++      {{- end }}
++      {{- end }}
++      {{- end }}
+ {{- if .Values.indexTemplateLoad }}
+       - name: "load-es-template"
+         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+@@ -95,6 +106,16 @@ spec:
+           valueFrom:
+             fieldRef:
+               fieldPath: spec.nodeName
++      ## make output.elasticsearch parms visible
++      {{- range $key, $value := .Values.config}}
++      {{- $configname := $key | upper | replace "." "_" -}}
++      {{ if eq $configname "OUTPUT_ELASTICSEARCH" -}}
++      {{- range $key2, $value2 := $value}}
++        - name: "{{ $configname }}_{{ $key2 | upper }}"
++          value: {{ $value2 | quote }}
++      {{- end }}
++      {{- end }}
++      {{- end }}
+ {{- if .Values.extraVars }}
+ {{ toYaml .Values.extraVars | indent 8 }}
+ {{- end }}
+diff --git a/stable/metricbeat/templates/configmap.yaml b/stable/metricbeat/templates/configmap.yaml
+index 21890b4..f990f0c 100644
+--- a/stable/metricbeat/templates/configmap.yaml
++++ b/stable/metricbeat/templates/configmap.yaml
+@@ -10,8 +10,41 @@ metadata:
+ data:
+   setup-script.sh: |-
+     #!/bin/bash
++    #
++    # This is best effort to load the template into elasticsearch
++    # if beats are going to elasticsearch via logstash.
++    #
+     BEAT='metricbeat'
+     BEAT_VER=$($BEAT version | awk '{print $3}')
++
++    ADDR=$OUTPUT_ELASTICSEARCH_HOSTS
++    echo $ADDR
++
++    # Check if this is a map of entries.  If so, we'll only export the template
++    # to the first address
++    if [[ ${ADDR:0:1} == [ ]]; then
++       # Remove the square brackets
++       ADDR=${ADDR:1:-1}
++       # Take the first entry in case there are more than one
++       ADDR=${ADDR%%,*}
++    fi
++    echo $ADDR
++
++    # Check if user has formatted with http:// on front, if not we need to add
++    HTTP='http://'
++    if [[ ${ADDR} == http* ]]; then
++       HTTP=''
++    fi
++    echo $HTTP
++
++    # Check for ip address containing special characters where -g must be used in curl command
++    # IPV6 Addresses should come in with square braces around the address.
++    CURL_G=''
++    if [[ ${ADDR} == *[* ]]; then
++       CURL_G=' -g  '
++    fi
++    echo $CURL_G
++
+     # check if logstash output is enabled, via crude parsing of the .yml file.
+     sed -e '/output.logstash/,/enabled:/!d' ${BEAT}.yml  | grep -i true
+     if [[ $? -eq 0 ]]; then
+@@ -20,15 +53,9 @@ data:
+        # remove the lifecycle section of the yaml, as elasticsearch will choke
+        # on it as oss version does not support ilm.
+        sed -i '/lifecycle/,+3d' /tmp/beat.template.json
+-       curl -XPUT -H "Content-Type: application/json" http://{$STX_ELASTICSEARCH_CLIENT_SERVICE_HOST}:{$STX_ELASTICSEARCH_CLIENT_SERVICE_PORT_HTTP}/_template/{$BEAT}-{$BEAT_VER} -d@/tmp/beat.template.json
+-       # prime the index as a write index
+-       curl -XPUT -H "Content-Type: application/json" -d   "{
+-          \"aliases\": {
+-             \"{BEAT}-{$BEAT_VER}\": {
+-                \"is_write_index\": \"true\"
+-             }
+-          }
+-       }" http://{$STX_ELASTICSEARCH_CLIENT_SERVICE_HOST}:{$STX_ELASTICSEARCH_CLIENT_SERVICE_PORT_HTTP}/{$BEAT}-{$BEAT_VER}-000001
++       curl -v $CURL_G -XPUT -H "Content-Type: application/json" $HTTP$ADDR/_template/$BEAT-$BEAT_VER -d@/tmp/beat.template.json
+     else
+-        echo "logstash not configured, not exporting template, should be done for us."
++       echo "logstash not configured, not exporting template, should be done for us."
+     fi
++    # Above is non-fatal if there is a problem.  Always pass.
++    exit 0
+diff --git a/stable/metricbeat/templates/daemonset.yaml b/stable/metricbeat/templates/daemonset.yaml
+index e3d7437..1ae3a34 100644
+--- a/stable/metricbeat/templates/daemonset.yaml
++++ b/stable/metricbeat/templates/daemonset.yaml
+@@ -49,6 +49,17 @@ spec:
+           readOnly: true
+           subPath: metricbeat.yml
+         env:
++      ## make output.elasticsearch parms visible
++      {{- range $key, $value := .Values.daemonset.config}}
++      {{- $configname := $key | upper | replace "." "_" -}}
++      {{ if eq $configname "OUTPUT_ELASTICSEARCH" -}}
++      {{- range $key2, $value2 := $value}}
++        - name: "{{ $configname }}_{{ $key2 | upper }}"
++          value: {{ $value2 | quote }}
++      {{- end }}
++      {{- end }}
++      {{- end }}
++
+       containers:
+       - name: {{ .Chart.Name }}
+         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+@@ -73,6 +84,16 @@ spec:
+           valueFrom:
+             fieldRef:
+               fieldPath: spec.nodeName
++      ## make output.elasticsearch parms visible
++      {{- range $key, $value := .Values.daemonset.config}}
++      {{- $configname := $key | upper | replace "." "_" -}}
++      {{ if eq $configname "OUTPUT_ELASTICSEARCH" -}}
++      {{- range $key2, $value2 := $value}}
++        - name: "{{ $configname }}_{{ $key2 | upper }}"
++          value: {{ $value2 | quote }}
++      {{- end }}
++      {{- end }}
++      {{- end }}
+ {{- if .Values.extraEnv }}
+ {{ toYaml .Values.extraEnv | indent 8 }}
+ {{- end }}
+-- 
+1.8.3.1
+
