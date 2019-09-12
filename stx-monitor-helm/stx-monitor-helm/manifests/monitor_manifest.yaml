@@ -10,7 +10,7 @@ data:
   wait:
     timeout: 600
     labels:
-      release: stx-nginx-ingress
+      release: mon-nginx-ingress
   install:
     no_hooks: false
   upgrade:
@@ -19,7 +19,7 @@ data:
       delete:
         - type: job
           labels:
-            release: stx-nginx-ingress
+            release: mon-nginx-ingress
   values:
     controller:
       kind: DaemonSet
@@ -64,7 +64,7 @@ data:
   wait:
     timeout: 600
     labels:
-      release: stx-elasticsearch
+      release: mon-elasticsearch
   test:
     enabled: false
   install:
@@ -75,20 +75,16 @@ data:
       delete:
         - type: job
           labels:
-            release: stx-elasticsearch
+            release: mon-elasticsearch
         - type: pod
           labels:
-            release: stx-elasticsearch
+            release: mon-elasticsearch
             component: test
   values:
     image:
       repository: "docker.elastic.co/elasticsearch/elasticsearch-oss"
       tag: 7.2.0
     cluster:
-      config:
-        cluster.initial_master_nodes:
-          - stx-elasticsearch-master-0
-          - stx-elasticsearch-master-1
       env:
         MINIMUM_MASTER_NODES: "1"
         EXPECTED_MASTER_NODES: "1"
@@ -102,9 +98,9 @@ data:
           nginx.ingress.kubernetes.io/ssl-redirect: "false"
           nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
         # Note in order to differentiate from kibana, prefix with
-        # stx-elasticsearch-client, but strip before presenting
+        # mon-elasticsearch-client, but strip before presenting
         # to elasticsearch with above rewrite-target
-        path: /stx-elasticsearch-client(/|$)(.*)
+        path: /mon-elasticsearch-client(/|$)(.*)
         hosts:
           - ""
     master:
@@ -132,7 +128,7 @@ data:
   wait:
     timeout: 600
     labels:
-      release: stx-filebeat
+      release: mon-filebeat
   test:
     enabled: false
   install:
@@ -143,10 +139,10 @@ data:
       delete:
         - type: job
           labels:
-            release: stx-filebeat
+            release: mon-filebeat
         - type: pod
           labels:
-            release: stx-filebeat
+            release: mon-filebeat
             component: test
   values:
     image:
@@ -157,14 +153,14 @@ data:
         enabled: false
       output.logstash:
         enabled: true
-        hosts: ["stx-logstash:5044"]
+        hosts: ["mon-logstash:5044"]
       output.elasticsearch:
         enabled: false
-        hosts: ["http://stx-elasticsearch-client:9200"]
+        hosts: ["http://mon-elasticsearch-client:9200"]
         ilm.pattern: "000001"
       setup.kibana:
         #  Note port 5601 is default
-        host: "stx-kibana"
+        host: "mon-kibana"
       setup.dashboards:
         enabled: true
       filebeat.autodiscover:
@@ -181,7 +177,7 @@ data:
     extraVolumes:
       - configMap:
           defaultMode: 493
-          name: stx-filebeat
+          name: mon-filebeat
         name: setupscript
     tolerations:
       - key: "services"
@@ -206,7 +202,7 @@ data:
   wait:
     timeout: 600
     labels:
-      release: stx-metricbeat
+      release: mon-metricbeat
   test:
     enabled: false
   install:
@@ -217,10 +213,10 @@ data:
       delete:
         - type: job
           labels:
-            release: stx-metricbeat
+            release: mon-metricbeat
         - type: pod
           labels:
-            release: stx-metricbeat
+            release: mon-metricbeat
             component: test
   values:
     image:
@@ -232,18 +228,18 @@ data:
           enabled: false
         output.logstash:
           enabled: true
-          hosts: ["stx-logstash:5044"]
+          hosts: ["mon-logstash:5044"]
         output.elasticsearch:
           # this must be opposite of above output.logstash.enabled
           enabled: false
-          hosts: ["http://stx-elasticsearch-client:9200"]
+          hosts: ["http://mon-elasticsearch-client:9200"]
           ilm.pattern: "000001"
         processors:
           - add_kubernetes_metadata:
               in_cluster: true
         setup.kibana:
           # for on box kibana, note port 5601 is default
-          host: "stx-kibana"
+          host: "mon-kibana"
         setup.dashboards:
           enabled: true
       metricbeat.autodiscover:
@@ -264,14 +260,14 @@ data:
           enabled: false
         output.logstash:
           enabled: true
-          hosts: ["stx-logstash:5044"]
+          hosts: ["mon-logstash:5044"]
         output.elasticsearch:
           enabled: false
-          hosts: ["http://stx-elasticsearch-client:9200"]
+          hosts: ["http://mon-elasticsearch-client:9200"]
           ilm.pattern: "000001"
         setup.kibana:
           # for onbox kibana, note port 5601 is default
-          host: "stx-kibana"
+          host: "mon-kibana"
           # for offbox kibana, will fail if we can't connect
           # host: "128.224.140.223"
         setup.dashboards:
@@ -299,7 +295,7 @@ data:
   wait:
     timeout: 600
     labels:
-      release: stx-kube-state-metrics
+      release: mon-kube-state-metrics
   test:
     enabled: false
   install:
@@ -310,10 +306,10 @@ data:
       delete:
         - type: job
           labels:
-            release: stx-kube-state-metrics
+            release: mon-kube-state-metrics
         - type: pod
           labels:
-            release: stx-kube-state-metrics
+            release: mon-kube-state-metrics
             component: test
   values:
     image:
@@ -338,7 +334,7 @@ data:
   wait:
     timeout: 600
     labels:
-      release: stx-kibana
+      release: mon-kibana
   test:
     enabled: false
   install:
@@ -349,10 +345,10 @@ data:
       delete:
         - type: job
           labels:
-            release: stx-kibana
+            release: mon-kibana
         - type: pod
           labels:
-            release: stx-kibana
+            release: mon-kibana
             component: test
   values:
     image:
@@ -369,7 +365,7 @@ data:
         - ""
     files:
       kibana.yml:
-        elasticsearch.hosts: http://stx-elasticsearch-client:9200
+        elasticsearch.hosts: http://mon-elasticsearch-client:9200
         server.host: "::"
     nodeSelector:
       elastic-controller: "enabled"
@@ -391,7 +387,7 @@ data:
   wait:
     timeout: 600
     labels:
-      release: stx-logstash
+      release: mon-logstash
   test:
     enabled: false
   install:
@@ -402,10 +398,10 @@ data:
       delete:
         - type: job
           labels:
-            release: stx-logstash
+            release: mon-logstash
         - type: pod
           labels:
-            release: stx-logstash
+            release: mon-logstash
             component: test
   values:
     image:
@@ -414,7 +410,7 @@ data:
     nodeSelector:
       elastic-controller: "enabled"
     elasticsearch:
-      host: stx-elasticsearch-client
+      host: mon-elasticsearch-client
     config:
       elasticsearch.path: ""
     outputs:
@@ -487,7 +483,7 @@ data:
         nginx.ingress.kubernetes.io/rewrite-target: /$2
         nginx.ingress.kubernetes.io/ssl-redirect: "false"
         nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
-      path: /stx-logstash(/|$)(.*)
+      path: /mon-logstash(/|$)(.*)
       servicePort: 9600
       hosts:
         - ""
@@ -573,7 +569,7 @@ metadata:
   schema: metadata/Document/v1
   name: monitor-armada-manifest
 data:
-  release_prefix: stx
+  release_prefix: mon
   chart_groups:
     - nginx-ingress
     - kibana
