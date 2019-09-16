@@ -158,6 +158,10 @@ data:
         enabled: false
         hosts: ["http://mon-elasticsearch-client:9200"]
         ilm.pattern: "000001"
+        index: ${INDEX_NAME}-%{+yyyy.MM.dd}
+      setup.template:
+        name: ${INDEX_NAME}
+        pattern: ${INDEX_PATTERN}
       setup.kibana:
         #  Note port 5601 is default
         host: "mon-kibana"
@@ -234,6 +238,10 @@ data:
           enabled: false
           hosts: ["http://mon-elasticsearch-client:9200"]
           ilm.pattern: "000001"
+          index: ${INDEX_NAME}-%{+yyyy.MM.dd}
+        setup.template:
+          name: ${INDEX_NAME}
+          pattern: ${INDEX_PATTERN}
         processors:
           - add_kubernetes_metadata:
               in_cluster: true
@@ -265,6 +273,10 @@ data:
           enabled: false
           hosts: ["http://mon-elasticsearch-client:9200"]
           ilm.pattern: "000001"
+          index: ${INDEX_NAME}-%{+yyyy.MM.dd}
+        setup.template:
+          name: ${INDEX_NAME}
+          pattern: ${INDEX_PATTERN}
         setup.kibana:
           # for onbox kibana, note port 5601 is default
           host: "mon-kibana"
@@ -422,14 +434,14 @@ data:
             elasticsearch {
               hosts => ["${ELASTICSEARCH_HOST}:${ELASTICSEARCH_PORT}${ELASTICSEARCH_PATH}"]
               manage_template => false
-              index => "collectd-%{+YYYY.MM.dd}"
+              index => "collectd${SYSTEM_NAME_FOR_INDEX}-%{+YYYY.MM.dd}"
             }
           }
           if [type] == "beats" {
             elasticsearch {
               hosts => ["${ELASTICSEARCH_HOST}:${ELASTICSEARCH_PORT}${ELASTICSEARCH_PATH}"]
               manage_template => false
-              index => "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
+              index => "%{[@metadata][beat]}-%{[@metadata][version]}${SYSTEM_NAME_FOR_INDEX}-%{+YYYY.MM.dd}"
             }
           }
         }

@@ -23,6 +23,7 @@ Patch02: 0002-kibana-workaround-checksum-for-configmap.yaml.patch
 Patch03: 0003-helm-chart-changes-for-stx-monitor.patch
 Patch04: 0004-ipv6-helm-chart-changes.patch
 Patch05: 0005-decouple-config.patch
+Patch06: 0006-add-system-info.patch
 
 BuildRequires: helm
 
@@ -36,6 +37,7 @@ Monitor Helm charts
 %patch03 -p1
 %patch04 -p1
 %patch05 -p1
+%patch06 -p1
 
 %build
 # initialize helm and build the toolkit
