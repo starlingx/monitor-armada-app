@@ -24,6 +24,7 @@ Patch03: 0003-helm-chart-changes-for-stx-monitor.patch
 Patch04: 0004-ipv6-helm-chart-changes.patch
 Patch05: 0005-decouple-config.patch
 Patch06: 0006-add-system-info.patch
+Patch07: 0007-three-masters.patch
 
 BuildRequires: helm
 
@@ -38,6 +39,7 @@ Monitor Helm charts
 %patch04 -p1
 %patch05 -p1
 %patch06 -p1
+%patch07 -p1
 
 %build
 # initialize helm and build the toolkit
