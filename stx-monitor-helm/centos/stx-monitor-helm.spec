@@ -13,7 +13,9 @@ Source0: %{name}-%{version}.tar.gz
 
 BuildArch: noarch
 BuildRequires: monitor-helm
+BuildRequires: monitor-helm-elastic
 Requires: monitor-helm
+Requires: monitor-helm-elastic
 
 %description
 StarlingX Monitor Application Armada Helm Charts

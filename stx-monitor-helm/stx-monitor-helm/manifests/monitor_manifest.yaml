@@ -54,68 +54,158 @@ data:
   dependencies: []
 ---
 schema: armada/Chart/v1
-metadata:
-  schema: metadata/Document/v1
-  name: elasticsearch
 data:
-  chart_name: elasticsearch
-  release: elasticsearch
-  namespace: monitor
-  wait:
-    timeout: 600
-    labels:
-      release: mon-elasticsearch
-  test:
-    enabled: false
+  chart_name: elasticsearch-data
+  dependencies: []
   install:
     no_hooks: false
+  namespace: monitor
+  release: elasticsearch-data
+  source:
+    location: http://172.17.0.1:8080/helm_charts/starlingx/elasticsearch-7.3.2.tgz
+    reference: master
+    subpath: elasticsearch
+    type: tar
+  test:
+    enabled: false
   upgrade:
     no_hooks: false
     pre:
       delete:
-        - type: job
-          labels:
-            release: mon-elasticsearch
-        - type: pod
-          labels:
-            release: mon-elasticsearch
-            component: test
+      - labels:
+          release: mon-elasticsearch-data
+        type: job
+      - labels:
+          component: test
+          release: mon-elasticsearch-data
+        type: pod
   values:
-    image:
-      repository: "docker.elastic.co/elasticsearch/elasticsearch-oss"
-      tag: 7.2.0
-    cluster:
-      env:
-        MINIMUM_MASTER_NODES: "1"
-        EXPECTED_MASTER_NODES: "1"
-        RECOVER_AFTER_MASTER_NODES: "1"
-    client:
-      ingress:
-        enabled: true
-        annotations:
-          kubernetes.io/ingress.class: "nginx"
-          nginx.ingress.kubernetes.io/rewrite-target: /$2
-          nginx.ingress.kubernetes.io/ssl-redirect: "false"
-          nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
-        # Note in order to differentiate from kibana, prefix with
-        # mon-elasticsearch-client, but strip before presenting
-        # to elasticsearch with above rewrite-target
-        path: /mon-elasticsearch-client(/|$)(.*)
-        hosts:
-          - ""
-    master:
-      updateStrategy:
-        type: "RollingUpdate"
-    data:
-      terminationGracePeriodSeconds: 240
-      updateStrategy:
-        type: "RollingUpdate"
-  source:
-    type: tar
-    location: http://172.17.0.1:8080/helm_charts/starlingx/elasticsearch-1.24.0.tgz
-    subpath: elasticsearch
-    reference: master
+    clusterName: 'mon-elasticsearch'
+    nodeGroup: 'data'
+    roles:
+      master: 'false'
+      data: 'true'
+      ingest: 'false'
+    replicas: 2
+    minimumMasterNodes: 1
+    nodeSelector:
+      elastic-data: enabled
+    image: docker.elastic.co/elasticsearch/elasticsearch-oss
+    imageTag: 7.3.2
+    esMajorVersion: 7
+  wait:
+    labels:
+      release: mon-elasticsearch-data
+    timeout: 600
+metadata:
+  name: elasticsearch-data
+  schema: metadata/Document/v1
+---
+schema: armada/Chart/v1
+data:
+  chart_name: elasticsearch-client
   dependencies: []
+  install:
+    no_hooks: false
+  namespace: monitor
+  release: elasticsearch-client
+  source:
+    location: http://172.17.0.1:8080/helm_charts/starlingx/elasticsearch-7.3.2.tgz
+    reference: master
+    subpath: elasticsearch
+    type: tar
+  test:
+    enabled: false
+  upgrade:
+    no_hooks: false
+    pre:
+      delete:
+      - labels:
+          release: mon-elasticsearch-client
+        type: job
+      - labels:
+          component: test
+          release: mon-elasticsearch-client
+        type: pod
+  values:
+    clusterName: 'mon-elasticsearch'
+    nodeGroup: 'client'
+    roles:
+      master: 'false'
+      data: 'false'
+      ingest: 'true'
+    replicas: 2
+    minimumMasterNodes: 1
+    ingress:
+      enabled: true
+      annotations:
+        kubernetes.io/ingress.class: nginx
+        nginx.ingress.kubernetes.io/force-ssl-redirect: 'false'
+        nginx.ingress.kubernetes.io/rewrite-target: /$2
+        nginx.ingress.kubernetes.io/ssl-redirect: 'false'
+      hosts:
+      - ''
+      path: /mon-elasticsearch-client(/|$)(.*)
+    nodeSelector:
+      elastic-client: enabled
+    image: docker.elastic.co/elasticsearch/elasticsearch-oss
+    imageTag: 7.3.2
+    esMajorVersion: 7
+  wait:
+    labels:
+      release: mon-elasticsearch-client
+    timeout: 600
+metadata:
+  name: elasticsearch-client
+  schema: metadata/Document/v1
+---
+schema: armada/Chart/v1
+data:
+  chart_name: elasticsearch-master
+  dependencies: []
+  install:
+    no_hooks: false
+  namespace: monitor
+  release: elasticsearch-master
+  source:
+    location: http://172.17.0.1:8080/helm_charts/starlingx/elasticsearch-7.3.2.tgz
+    reference: master
+    subpath: elasticsearch
+    type: tar
+  test:
+    enabled: false
+  upgrade:
+    no_hooks: false
+    pre:
+      delete:
+      - labels:
+          release: mon-elasticsearch-master
+        type: job
+      - labels:
+          component: test
+          release: mon-elasticsearch-master
+        type: pod
+  values:
+    clusterName: 'mon-elasticsearch'
+    nodeGroup: 'master'
+    roles:
+      master: 'true'
+      data: 'false'
+      ingest: 'false'
+    replicas: 1
+    minimumMasterNodes: 1
+    nodeSelector:
+      elastic-master: enabled
+    image: docker.elastic.co/elasticsearch/elasticsearch-oss
+    imageTag: 7.3.2
+    esMajorVersion: 7
+  wait:
+    labels:
+      release: mon-elasticsearch-master
+    timeout: 600
+metadata:
+  name: elasticsearch-master
+  schema: metadata/Document/v1
 ---
 schema: armada/Chart/v1
 metadata:
@@ -147,7 +237,7 @@ data:
   values:
     image:
       repository: "docker.elastic.co/beats/filebeat-oss"
-      tag: 7.2.0
+      tag: 7.3.2
     config:
       output.file:
         enabled: false
@@ -225,7 +315,7 @@ data:
   values:
     image:
       repository: "docker.elastic.co/beats/metricbeat-oss"
-      tag: 7.2.0
+      tag: 7.3.2
     daemonset:
       config:
         output.file:
@@ -365,7 +455,7 @@ data:
   values:
     image:
       repository: "docker.elastic.co/kibana/kibana-oss"
-      tag: 7.2.0
+      tag: 7.3.2
     ingress:
       enabled: true
       annotations:
@@ -418,7 +508,7 @@ data:
   values:
     image:
       repository: "docker.elastic.co/logstash/logstash-oss"
-      tag: 7.2.0
+      tag: 7.3.2
     nodeSelector:
       elastic-controller: "enabled"
     elasticsearch:
@@ -518,13 +608,15 @@ data:
 ---
 schema: armada/ChartGroup/v1
 metadata:
-  schema: metadata/Document/v1
   name: elasticsearch
+  schema: metadata/Document/v1
 data:
+  chart_group:
+  - elasticsearch-master
+  - elasticsearch-data
+  - elasticsearch-client
   description: "Deploy elasticsearch"
   sequenced: true
-  chart_group:
-    - elasticsearch
 ---
 schema: armada/ChartGroup/v1
 metadata:

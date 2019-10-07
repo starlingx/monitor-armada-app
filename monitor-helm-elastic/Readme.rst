@@ -1,8 +1,5 @@
 This repo is for
-https://github.com/helm/charts/tree/master/stable/filebeat
-https://github.com/helm/charts/tree/master/stable/metricbeat
-https://github.com/helm/charts/tree/master/stable/kibana
-https://github.com/helm/charts/tree/master/stable/kube-state-metrics
+https://github.com/elastic/helm-charts/tree/master/elasticsearch
 
 Changes to this repo are needed for StarlingX and those changes are
 not yet merged.
