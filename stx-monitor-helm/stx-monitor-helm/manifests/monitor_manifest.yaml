@@ -208,6 +208,112 @@ metadata:
   schema: metadata/Document/v1
 ---
 schema: armada/Chart/v1
+data:
+  chart_name: elasticsearch-curator
+  dependencies: []
+  install:
+    no_hooks: false
+  namespace: monitor
+  release: elasticsearch-curator
+  source:
+    location: http://172.17.0.1:8080/helm_charts/starlingx/elasticsearch-curator-2.0.2.tgz
+    reference: master
+    subpath: elasticsearch-curator
+    type: tar
+  test:
+    enabled: false
+  upgrade:
+    no_hooks: false
+    pre:
+      delete:
+      - labels:
+          release: mon-elasticsearch-curator
+        type: job
+      - labels:
+          component: test
+          release: mon-elasticsearch-curator
+        type: pod
+  values:
+    image:
+      repository: untergeek/curator
+      tag: 5.7.6
+    env:
+      FILEBEAT_INDEX_LIMIT_GB: 48
+      METRICBEAT_INDEX_LIMIT_GB: 38
+      COLLECTD_INDEX_LIMIT_GB: 9
+    configMaps:
+      action_file_yml:  |-
+        ---
+        actions:
+          1:
+            action: delete_indices
+            description: "Clean up ES filebeat indices"
+            options:
+              timeout_override:
+              continue_if_exception: False
+              disable_action: False
+              ignore_empty_list: True
+            filters:
+            - filtertype: pattern
+              kind: prefix
+              value: filebeat-
+            - filtertype: space
+              disk_space: ${FILEBEAT_INDEX_LIMIT_GB}
+              use_age: True
+              source: creation_date
+          2:
+            action: delete_indices
+            description: "Clean up ES metricbeat indices"
+            options:
+              timeout_override:
+              continue_if_exception: False
+              disable_action: False
+              ignore_empty_list: True
+            filters:
+            - filtertype: pattern
+              kind: prefix
+              value: metricbeat-
+            - filtertype: space
+              disk_space: ${METRICBEAT_INDEX_LIMIT_GB}
+              use_age: True
+              source: creation_date
+          3:
+            action: delete_indices
+            description: "Clean up ES collectd indices"
+            options:
+              timeout_override:
+              continue_if_exception: False
+              disable_action: False
+              ignore_empty_list: True
+            filters:
+            - filtertype: pattern
+              kind: prefix
+              value: collectd-
+            - filtertype: space
+              disk_space: ${COLLECTD_INDEX_LIMIT_GB}
+              use_age: True
+              source: creation_date
+      config_yml:  |-
+        ---
+        client:
+          hosts:
+            - mon-elasticsearch-client
+          port: 9200
+        logging:
+          loglevel: DEBUG
+    cronjob:
+      schedule: "0 1 * * *"
+      failedJobsHistoryLimit: "10"
+      successfulJobsHistoryLimit: "10"
+    nodeSelector:
+      elastic-controller: enabled
+  wait:
+    resources: []
+metadata:
+  name: elasticsearch-curator
+  schema: metadata/Document/v1
+---
+schema: armada/Chart/v1
 metadata:
   schema: metadata/Document/v1
   name: filebeat
@@ -668,6 +774,16 @@ data:
   chart_group:
     - kibana
 ---
+schema: armada/ChartGroup/v1
+metadata:
+  schema: metadata/Document/v1
+  name: elasticsearch-curator
+data:
+  description: "Deploy elasticsearch-curator"
+  sequenced: true
+  chart_group:
+    - elasticsearch-curator
+---
 schema: armada/Manifest/v1
 metadata:
   schema: metadata/Document/v1
@@ -678,6 +794,7 @@ data:
     - nginx-ingress
     - kibana
     - elasticsearch
+    - elasticsearch-curator
     - logstash
     - filebeat
     - metricbeat

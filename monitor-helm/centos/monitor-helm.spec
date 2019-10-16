@@ -26,6 +26,7 @@ Patch05: 0005-decouple-config.patch
 Patch06: 0006-add-system-info.patch
 Patch07: 0007-three-masters.patch
 Patch08: 0008-Update-stx-monitor-for-kubernetes-API-1.16.patch
+Patch09: 0009-add-curator-as-of-2019-10-10.patch
 
 BuildRequires: helm
 
@@ -42,6 +43,7 @@ Monitor Helm charts
 %patch06 -p1
 %patch07 -p1
 %patch08 -p1
+%patch09 -p1
 
 %build
 # initialize helm and build the toolkit
@@ -76,6 +78,7 @@ make kube-state-metrics
 make kibana
 make nginx-ingress
 make logstash
+make elasticsearch-curator
 
 # terminate helm server (the last backgrounded task)
 kill %1
