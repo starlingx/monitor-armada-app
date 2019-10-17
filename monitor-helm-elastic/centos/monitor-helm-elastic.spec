@@ -21,6 +21,7 @@ BuildArch:     noarch
 Patch01: 0001-add-makefile.patch
 Patch02: 0002-Add-compatibility-for-k8s-1.16.patch
 Patch03: 0003-use-oss-image.patch
+Patch04: 0004-Update-to-Elastic-7.4.0-Release.patch
 
 BuildRequires: helm
 
@@ -32,7 +33,7 @@ Monitor Helm elasticsearch charts
 %patch01 -p1
 %patch02 -p1
 %patch03 -p1
-
+%patch04 -p1
 
 %build
 # initialize helm and build the toolkit
