@@ -27,6 +27,7 @@ Patch06: 0006-add-system-info.patch
 Patch07: 0007-three-masters.patch
 Patch08: 0008-Update-stx-monitor-for-kubernetes-API-1.16.patch
 Patch09: 0009-add-curator-as-of-2019-10-10.patch
+Patch10: 0010-Update-kube-state-metrics-1.8.0-to-commit-09daf19.patch
 
 BuildRequires: helm
 
@@ -44,6 +45,7 @@ Monitor Helm charts
 %patch07 -p1
 %patch08 -p1
 %patch09 -p1
+%patch10 -p1
 
 %build
 # initialize helm and build the toolkit

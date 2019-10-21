@@ -540,9 +540,11 @@ data:
             component: test
   values:
     image:
-      tag: v1.5.0
+      tag: v1.8.0
     nodeSelector:
       elastic-controller: "enabled"
+    customLabels:
+      release: mon-kube-state-metrics
     livenessProbe:
       initialDelaySeconds: 60
       periodSeconds: 30
@@ -553,7 +555,7 @@ data:
       timeoutSeconds: 30
   source:
     type: tar
-    location: http://172.17.0.1:8080/helm_charts/starlingx/kube-state-metrics-0.16.0.tgz
+    location: http://172.17.0.1:8080/helm_charts/starlingx/kube-state-metrics-2.4.1.tgz
     subpath: kube-state-metrics
     reference: master
   dependencies: []
