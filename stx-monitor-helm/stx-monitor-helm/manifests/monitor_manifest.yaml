@@ -507,6 +507,14 @@ data:
             - type: kubernetes
               host: ${NODE_NAME}
               hints.enabled: true
+    extraVolumeMounts:
+      - name: root
+        mountPath: /hostfs
+        readOnly: true
+    extraVolumes:
+      - name: root
+        hostPath:
+          path: /
   source:
     type: tar
     location: http://172.17.0.1:8080/helm_charts/starlingx/metricbeat-1.6.0.tgz
@@ -699,6 +707,16 @@ data:
           beats {
             port => 5044
             type => 'beats'
+          }
+        }
+    filters:
+      main: |-
+        filter {
+          mutate {
+            gsub => [
+              # strip /hostfs prefix from mount points in metricbeat metrics
+              "[system][filesystem][mount_point]", "^/hostfs($|/)", "/"
+            ]
           }
         }
     ports:
