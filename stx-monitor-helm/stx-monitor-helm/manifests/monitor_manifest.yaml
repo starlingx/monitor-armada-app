@@ -102,6 +102,7 @@ data:
     imageTag: 7.4.0
     esMajorVersion: 7
     masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
+    podManagementPolicy: OrderedReady
   wait:
     labels:
       release: mon-elasticsearch-data
@@ -171,6 +172,7 @@ data:
     imageTag: 7.4.0
     esMajorVersion: 7
     masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
+    podManagementPolicy: OrderedReady
   wait:
     labels:
       release: mon-elasticsearch-client
@@ -220,6 +222,7 @@ data:
     imageTag: 7.4.0
     esMajorVersion: 7
     masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
+    podManagementPolicy: OrderedReady
   wait:
     labels:
       release: mon-elasticsearch-master

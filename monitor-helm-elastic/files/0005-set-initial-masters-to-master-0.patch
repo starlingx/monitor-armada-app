@@ -1,0 +1,40 @@
+From 066b7c9996d9bdee56857eca8a1af72bbbaaafff Mon Sep 17 00:00:00 2001
+From: Kevin Smith <kevin.smith@windriver.com>
+Date: Thu, 24 Oct 2019 11:06:30 -0400
+Subject: [PATCH 1/1] set initial masters to master-0
+
+---
+ elasticsearch/templates/statefulset.yaml | 2 +-
+ elasticsearch/values.yaml                | 3 +++
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/elasticsearch/templates/statefulset.yaml b/elasticsearch/templates/statefulset.yaml
+index 36c7af6..e17d39e 100644
+--- a/elasticsearch/templates/statefulset.yaml
++++ b/elasticsearch/templates/statefulset.yaml
+@@ -233,7 +233,7 @@ spec:
+           {{- if eq .Values.roles.master "true" }}
+           {{- if ge (int (include "esMajorVersion" .)) 7 }}
+           - name: cluster.initial_master_nodes
+-            value: "{{ template "endpoints" . }}"
++            value: "{{ .Values.initialMasterNodes }}"
+           {{- else }}
+           - name: discovery.zen.minimum_master_nodes
+             value: "{{ .Values.minimumMasterNodes }}"
+diff --git a/elasticsearch/values.yaml b/elasticsearch/values.yaml
+index 6175540..0d983eb 100755
+--- a/elasticsearch/values.yaml
++++ b/elasticsearch/values.yaml
+@@ -6,6 +6,9 @@ nodeGroup: "master"
+ # This should be set to clusterName + "-" + nodeGroup for your master group
+ masterService: ""
+ 
++# On initial cluster formation, the initial set of masters.
++initialMasterNodes: "mon-elasticsearch-master-0"
++
+ # Elasticsearch roles that will be applied to this nodeGroup
+ # These will be set as environment variables. E.g. node.master=true
+ roles:
+-- 
+1.8.3.1
+
