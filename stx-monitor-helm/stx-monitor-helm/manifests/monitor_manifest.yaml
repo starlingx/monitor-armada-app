@@ -104,6 +104,10 @@ data:
     masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
     podManagementPolicy: OrderedReady
   wait:
+    resources:
+      - labels:
+          release: mon-elasticsearch-data
+        type: statefulset
     labels:
       release: mon-elasticsearch-data
     timeout: 600
@@ -174,6 +178,10 @@ data:
     masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
     podManagementPolicy: OrderedReady
   wait:
+    resources:
+      - labels:
+          release: mon-elasticsearch-client
+        type: statefulset
     labels:
       release: mon-elasticsearch-client
     timeout: 600
@@ -224,6 +232,10 @@ data:
     masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
     podManagementPolicy: OrderedReady
   wait:
+    resources:
+      - labels:
+          release: mon-elasticsearch-master
+        type: statefulset
     labels:
       release: mon-elasticsearch-master
     timeout: 600
@@ -626,6 +638,10 @@ data:
   release: logstash
   namespace: monitor
   wait:
+    resources:
+      - labels:
+          release: mon-logstash
+        type: statefulset
     timeout: 600
     labels:
       release: mon-logstash
