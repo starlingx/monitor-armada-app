@@ -103,6 +103,14 @@ data:
     esMajorVersion: 7
     masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
     podManagementPolicy: OrderedReady
+    clusterHealthCheckParams: ''
+    extraEnvs:
+      - name: DATA_PRESTOP_SLEEP
+        value: "100"
+    lifecycle:
+      preStop:
+        exec:
+          command: ["/bin/sh", "-c", "MASTER=$(printenv node.master);if [[ \"$MASTER\" == true ]]; then sleep $(printenv DATA_PRESTOP_SLEEP);fi"]
   wait:
     resources:
       - labels:
@@ -177,6 +185,7 @@ data:
     esMajorVersion: 7
     masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
     podManagementPolicy: OrderedReady
+    clusterHealthCheckParams: ''
   wait:
     resources:
       - labels:
@@ -231,6 +240,7 @@ data:
     esMajorVersion: 7
     masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
     podManagementPolicy: OrderedReady
+    clusterHealthCheckParams: ''
   wait:
     resources:
       - labels:
