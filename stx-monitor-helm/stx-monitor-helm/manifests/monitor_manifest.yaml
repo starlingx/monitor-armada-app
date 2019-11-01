@@ -365,6 +365,30 @@ data:
       schedule: "0 1 * * *"
       failedJobsHistoryLimit: "10"
       successfulJobsHistoryLimit: "10"
+    command:
+      - 'sh'
+      - '-c'
+      - 'source /tmp/cur_limits/set_factor.sh; echo LIMIT_FACTOR=$LIMIT_FACTOR; CD_GB=$(printenv COLLECTD_INDEX_LIMIT_GB);MB_GB=$(printenv METRICBEAT_INDEX_LIMIT_GB);FB_GB=$(printenv FILEBEAT_INDEX_LIMIT_GB);echo export COLLECTD_INDEX_LIMIT_GB=$(($CD_GB / $LIMIT_FACTOR)) > /tmp/cur_limits/new_limits.sh; echo export METRICBEAT_INDEX_LIMIT_GB=$(($MB_GB / $LIMIT_FACTOR)) >> /tmp/cur_limits/new_limits.sh;echo export FILEBEAT_INDEX_LIMIT_GB=$(($FB_GB / $LIMIT_FACTOR)) >> /tmp/cur_limits/new_limits.sh; source /tmp/cur_limits/new_limits.sh; cat /tmp/cur_limits/new_limits.sh; /curator/curator --config /etc/es-curator/config.yml /etc/es-curator/action_file.yml'
+    extraInitContainers:
+      limitset:
+        image: registry.local:9001/docker.elastic.co/beats/filebeat-oss:7.4.0
+        command:
+        - 'sh'
+        - '-c'
+        - 'echo export LIMIT_FACTOR=1 > /tmp/cur_limits/set_factor.sh; LIMIT_FACTOR=1; curl mon-elasticsearch-client:9200/_cluster/health?pretty | grep -E "number_of_data_nodes.*1"; if [[ $? -eq 0 ]]; then echo Only one data node, adjusting limits; LIMIT_FACTOR=2; fi; echo export LIMIT_FACTOR=$LIMIT_FACTOR > /tmp/cur_limits/set_factor.sh; exit 0'
+        volumeMounts:
+          - name: filebeatdummy
+            mountPath: /usr/share/filebeat
+          - name: curlimits
+            mountPath: /tmp/cur_limits/
+    extraVolumes:
+      - name: filebeatdummy
+        emptyDir: {}
+      - name: curlimits
+        emptyDir: {}
+    extraVolumeMounts:
+      - name: curlimits
+        mountPath: /tmp/cur_limits
     nodeSelector:
       elastic-controller: enabled
   wait:
