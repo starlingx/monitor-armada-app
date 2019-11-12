@@ -21,10 +21,15 @@ data:
           labels:
             release: mon-nginx-ingress
   values:
+    imagePullSecrets: [{"name": "default-registry-key"}]
     controller:
       kind: DaemonSet
       daemonset:
         useHostPort: false
+      image:
+        repository: registry.local:9001/quay.io/kubernetes-ingress-controller/nginx-ingress-controller
+        tag: 0.23.0
+        pullPolicy: IfNotPresent
       nodeSelector:
         elastic-controller: "enabled"
       config:
@@ -45,6 +50,10 @@ data:
       readinessProbe:
         initialDelaySeconds: 30
     defaultBackend:
+      image:
+        repository: registry.local:9001/k8s.gcr.io/defaultbackend
+        tag: 1.4
+        pullPolicy: IfNotPresent
       nodeSelector:
         elastic-controller: "enabled"
       service:
@@ -98,8 +107,9 @@ data:
     minimumMasterNodes: 1
     nodeSelector:
       elastic-data: enabled
-    image: docker.elastic.co/elasticsearch/elasticsearch-oss
+    image: registry.local:9001/docker.elastic.co/elasticsearch/elasticsearch-oss
     imageTag: 7.4.0
+    imagePullSecrets: [{"name": "default-registry-key"}]
     esMajorVersion: 7
     masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
     podManagementPolicy: OrderedReady
@@ -180,8 +190,9 @@ data:
       path: /mon-elasticsearch-client(/|$)(.*)
     nodeSelector:
       elastic-client: enabled
-    image: docker.elastic.co/elasticsearch/elasticsearch-oss
+    image: registry.local:9001/docker.elastic.co/elasticsearch/elasticsearch-oss
     imageTag: 7.4.0
+    imagePullSecrets: [{"name": "default-registry-key"}]
     esMajorVersion: 7
     masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
     podManagementPolicy: OrderedReady
@@ -235,8 +246,9 @@ data:
     minimumMasterNodes: 1
     nodeSelector:
       elastic-master: enabled
-    image: docker.elastic.co/elasticsearch/elasticsearch-oss
+    image: registry.local:9001/docker.elastic.co/elasticsearch/elasticsearch-oss
     imageTag: 7.4.0
+    imagePullSecrets: [{"name": "default-registry-key"}]
     esMajorVersion: 7
     masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
     podManagementPolicy: OrderedReady
@@ -281,8 +293,10 @@ data:
         type: pod
   values:
     image:
-      repository: docker.io/untergeek/curator
+      repository: registry.local:9001/docker.io/untergeek/curator
       tag: 5.7.6
+    rbac:
+      enabled: True
     env:
       FILEBEAT_INDEX_LIMIT_GB: 48
       METRICBEAT_INDEX_LIMIT_GB: 38
@@ -388,8 +402,14 @@ data:
             component: test
   values:
     image:
-      repository: "docker.elastic.co/beats/filebeat-oss"
+      repository: registry.local:9001/docker.elastic.co/beats/filebeat-oss
       tag: 7.4.0
+    monitoring:
+      enabled: true
+      image:
+        repository: registry.local:9001/docker.io/trustpilot/beat-exporter
+        tag: 0.1.1
+        pullPolicy: IfNotPresent
     config:
       output.file:
         enabled: false
@@ -466,7 +486,7 @@ data:
             component: test
   values:
     image:
-      repository: "docker.elastic.co/beats/metricbeat-oss"
+      repository: registry.local:9001/docker.elastic.co/beats/metricbeat-oss
       # 7.4.0 is required to monitor elastic
       tag: 7.4.0
     daemonset:
@@ -576,6 +596,7 @@ data:
             component: test
   values:
     image:
+      repository: registry.local:9001/quay.io/coreos/kube-state-metrics
       tag: v1.8.0
     nodeSelector:
       elastic-controller: "enabled"
@@ -625,7 +646,7 @@ data:
             component: test
   values:
     image:
-      repository: "docker.elastic.co/kibana/kibana-oss"
+      repository: registry.local:9001/docker.elastic.co/kibana/kibana-oss
       tag: 7.4.0
     ingress:
       enabled: true
@@ -682,8 +703,9 @@ data:
             component: test
   values:
     image:
-      repository: "docker.elastic.co/logstash/logstash-oss"
+      repository: registry.local:9001/docker.elastic.co/logstash/logstash-oss
       tag: 7.4.0
+      pullSecrets: [{"name": "default-registry-key"}]
     nodeSelector:
       elastic-controller: "enabled"
     elasticsearch:
