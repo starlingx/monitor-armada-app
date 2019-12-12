@@ -46,6 +46,9 @@ data:
       readinessProbe:
         initialDelaySeconds: 30
     defaultBackend:
+      image:
+        repository: k8s.gcr.io/defaultbackend
+        tag: "1.4"
       nodeSelector:
         elastic-controller: "enabled"
       service:
@@ -647,9 +650,6 @@ data:
     image:
       repository: docker.elastic.co/kibana/kibana-oss
       tag: 7.4.0
-    testFramework:
-      image: null
-      tag: null
     ingress:
       enabled: true
       annotations:
