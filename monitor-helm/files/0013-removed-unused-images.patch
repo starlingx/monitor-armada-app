@@ -1,0 +1,181 @@
+From 2d54de3ae3858aa6c67ba1de25860c440f5be8a2 Mon Sep 17 00:00:00 2001
+From: Kevin Smith <kevin.smith@windriver.com>
+Date: Thu, 12 Dec 2019 09:40:13 -0500
+Subject: [PATCH 1/1] removed unused images
+
+---
+ stable/kibana/templates/tests/test-configmap.yaml | 35 -------------------
+ stable/kibana/templates/tests/test.yaml           | 42 -----------------------
+ stable/kibana/values.yaml                         |  4 ---
+ stable/logstash/templates/statefulset.yaml        | 32 -----------------
+ stable/logstash/values.yaml                       |  5 ---
+ 5 files changed, 118 deletions(-)
+ delete mode 100644 stable/kibana/templates/tests/test-configmap.yaml
+ delete mode 100644 stable/kibana/templates/tests/test.yaml
+
+diff --git a/stable/kibana/templates/tests/test-configmap.yaml b/stable/kibana/templates/tests/test-configmap.yaml
+deleted file mode 100644
+index 912755e..0000000
+--- a/stable/kibana/templates/tests/test-configmap.yaml
++++ /dev/null
+@@ -1,35 +0,0 @@
+-apiVersion: v1
+-kind: ConfigMap
+-metadata:
+-  name: {{ template "kibana.fullname" . }}-test
+-  labels:
+-    app: {{ template "kibana.fullname" . }}
+-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+-    heritage: "{{ .Release.Service }}"
+-    release: "{{ .Release.Name }}"
+-data:
+-  run.sh: |-
+-    @test "Test Status" {
+-      {{- if .Values.service.selector }}
+-      skip "Can't guarentee pod names with selector"
+-      {{- else }}
+-      {{- $port := .Values.service.externalPort }}
+-      url="http://{{ template "kibana.fullname" . }}{{ if $port }}:{{ $port }}{{ end }}/api{{ .Values.livenessProbe.path }}"
+-
+-      # retry for 1 minute
+-      run curl -s -o /dev/null -I -w "%{http_code}" --retry 30 --retry-delay 2 $url
+-
+-      code=$(curl -s -o /dev/null -I -w "%{http_code}" $url)
+-      body=$(curl $url)
+-      if [ "$code" == "503" ]
+-      then
+-        skip "Kibana Unavailable (503), can't get status - see pod logs: $body"
+-      fi
+-
+-      result=$(echo $body | jq -cr '.status.statuses[]')
+-      [ "$result" != "" ]
+-
+-      result=$(echo $body | jq -cr '.status.statuses[] | select(.state != "green")')
+-      [ "$result" == "" ]
+-      {{- end }}
+-    }
+diff --git a/stable/kibana/templates/tests/test.yaml b/stable/kibana/templates/tests/test.yaml
+deleted file mode 100644
+index 8a518fd..0000000
+--- a/stable/kibana/templates/tests/test.yaml
++++ /dev/null
+@@ -1,42 +0,0 @@
+-apiVersion: v1
+-kind: Pod
+-metadata:
+-  name: {{ template "kibana.fullname" . }}-test
+-  labels:
+-    app: {{ template "kibana.fullname" . }}
+-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+-    heritage: "{{ .Release.Service }}"
+-    release: "{{ .Release.Name }}"
+-  annotations:
+-    "helm.sh/hook": test-success
+-spec:
+-  initContainers:
+-    - name: test-framework
+-      image: "{{ .Values.testFramework.image}}:{{ .Values.testFramework.tag }}"
+-      command:
+-      - "bash"
+-      - "-c"
+-      - |
+-        set -ex
+-        # copy bats to tools dir
+-        cp -R /usr/local/libexec/ /tools/bats/
+-      volumeMounts:
+-      - mountPath: /tools
+-        name: tools
+-  containers:
+-    - name: {{ .Release.Name }}-test
+-      image: "dwdraju/alpine-curl-jq"
+-      command: ["/tools/bats/bats", "-t", "/tests/run.sh"]
+-      volumeMounts:
+-        - mountPath: /tests
+-          name: tests
+-          readOnly: true
+-        - mountPath: /tools
+-          name: tools
+-  volumes:
+-  - name: tests
+-    configMap:
+-      name: {{ template "kibana.fullname" . }}-test
+-  - name: tools
+-    emptyDir: {}
+-  restartPolicy: Never
+diff --git a/stable/kibana/values.yaml b/stable/kibana/values.yaml
+index 4ce4b2a..7bc9cf5 100644
+--- a/stable/kibana/values.yaml
++++ b/stable/kibana/values.yaml
+@@ -3,10 +3,6 @@ image:
+   tag: "7.2.0"
+   pullPolicy: "IfNotPresent"
+ 
+-testFramework:
+-  image: "dduportal/bats"
+-  tag: "0.4.0"
+-
+ commandline:
+   args: []
+ 
+diff --git a/stable/logstash/templates/statefulset.yaml b/stable/logstash/templates/statefulset.yaml
+index 1a1a3ef..4749bb1 100644
+--- a/stable/logstash/templates/statefulset.yaml
++++ b/stable/logstash/templates/statefulset.yaml
+@@ -91,38 +91,6 @@ spec:
+           volumeMounts:
+ {{ toYaml .Values.volumeMounts | indent 12 }}
+ 
+-{{- if .Values.exporter.logstash.enabled }}
+-        ## logstash-exporter
+-        - name: {{ .Chart.Name }}-exporter
+-          image: "{{ .Values.exporter.logstash.image.repository }}:{{ .Values.exporter.logstash.image.tag }}"
+-          imagePullPolicy: {{ .Values.exporter.logstash.image.pullPolicy }}
+-          command: ["/bin/sh", "-c"]
+-          ## Delay start of logstash-exporter to give logstash more time to come online.
+-          args:
+-            - >-
+-              sleep 60;
+-              exec /logstash_exporter
+-                --logstash.endpoint=http://localhost:{{ .Values.exporter.logstash.target.port }}
+-                --web.listen-address=:{{ .Values.exporter.logstash.port }}
+-          ports:
+-            - name: ls-exporter
+-              containerPort: {{ .Values.exporter.logstash.port }}
+-              protocol: TCP
+-          livenessProbe:
+-{{ toYaml .Values.exporter.logstash.livenessProbe | indent 12 }}
+-          readinessProbe:
+-{{ toYaml .Values.exporter.logstash.readinessProbe | indent 12 }}
+-          {{- with .Values.exporter.logstash.config }}
+-          env:
+-            {{- range $key, $value := . }}
+-            - name: {{ $key | upper | replace "." "_" }}
+-              value: {{ $value | quote }}
+-            {{- end }}
+-          {{- end }}
+-          resources:
+-{{ toYaml .Values.exporter.logstash.resources | indent 12 }}
+-{{- end }}
+-
+     {{- with .Values.nodeSelector }}
+       nodeSelector:
+ {{ toYaml . | indent 8 }}
+diff --git a/stable/logstash/values.yaml b/stable/logstash/values.yaml
+index 9ba80c9..b8b8de2 100644
+--- a/stable/logstash/values.yaml
++++ b/stable/logstash/values.yaml
+@@ -169,11 +169,6 @@ volumes: []
+ 
+ exporter:
+   logstash:
+-    enabled: false
+-    image:
+-      repository: bonniernews/logstash_exporter
+-      tag: v0.1.2
+-      pullPolicy: IfNotPresent
+     env: {}
+     resources: {}
+     path: /metrics
+-- 
+1.8.3.1
+

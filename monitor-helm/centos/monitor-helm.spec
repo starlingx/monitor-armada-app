@@ -28,8 +28,9 @@ Patch07: 0007-three-masters.patch
 Patch08: 0008-Update-stx-monitor-for-kubernetes-API-1.16.patch
 Patch09: 0009-add-curator-as-of-2019-10-10.patch
 Patch10: 0010-Update-kube-state-metrics-1.8.0-to-commit-09daf19.patch
-Patch11: 0011-update-init-container-env-to-include-node-name.patch 
+Patch11: 0011-update-init-container-env-to-include-node-name.patch
 Patch12: 0012-Add-imagePullSecrets.patch
+Patch13: 0013-removed-unused-images.patch
 
 BuildRequires: helm
 
@@ -50,6 +51,7 @@ Monitor Helm charts
 %patch10 -p1
 %patch11 -p1
 %patch12 -p1
+%patch13 -p1
 
 %build
 # initialize helm and build the toolkit
