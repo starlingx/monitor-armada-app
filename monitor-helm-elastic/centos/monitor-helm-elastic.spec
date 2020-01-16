@@ -37,7 +37,7 @@ BuildRequires: chartmuseum
 Monitor Helm elasticsearch charts
 
 %prep
-%setup -n helm-charts-elastic
+%setup -n %(tar tf %SOURCE0 | head -1)
 %patch01 -p1
 %patch02 -p1
 %patch03 -p1
