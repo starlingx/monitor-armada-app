@@ -281,6 +281,8 @@ data:
           release: mon-elasticsearch-curator
         type: pod
   values:
+    image:
+      pullSecret: default-registry-key
     rbac:
       enabled: True
     env:
@@ -414,6 +416,7 @@ data:
     image:
       repository: docker.elastic.co/beats/filebeat-oss
       tag: 7.4.0
+      pullSecrets: ['default-registry-key']
     monitoring:
       enabled: true
     config:
@@ -494,6 +497,8 @@ data:
     image:
       repository: docker.elastic.co/beats/metricbeat-oss
       tag: 7.4.0
+    serviceAccount:
+      imagePullSecrets: [{"name": "default-registry-key"}]
     daemonset:
       config:
         output.file:
@@ -612,6 +617,8 @@ data:
       initialDelaySeconds: 60
       periodSeconds: 30
       timeoutSeconds: 30
+    serviceAccount:
+      imagePullSecrets: [{"name": "default-registry-key"}]
   source:
     type: tar
     location: http://172.17.0.1:8080/helm_charts/starlingx/kube-state-metrics-2.4.1.tgz
@@ -650,6 +657,7 @@ data:
     image:
       repository: docker.elastic.co/kibana/kibana-oss
       tag: 7.4.0
+      pullSecrets: [{'name': 'default-registry-key'}]
     ingress:
       enabled: true
       annotations:
