@@ -32,6 +32,7 @@ Patch11: 0011-update-init-container-env-to-include-node-name.patch
 Patch12: 0012-Add-imagePullSecrets.patch
 Patch13: 0013-removed-unused-images.patch
 Patch14: 0014-Add-rbac-replicasets-to-apps-apigroup-commit-1717e2d.patch
+Patch15: 0015-script-flexibility.patch
 
 BuildRequires: helm
 
@@ -54,6 +55,7 @@ Monitor Helm charts
 %patch12 -p1
 %patch13 -p1
 %patch14 -p1
+%patch15 -p1
 
 %build
 # initialize helm and build the toolkit

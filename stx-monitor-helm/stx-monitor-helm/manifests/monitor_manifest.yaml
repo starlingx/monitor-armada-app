@@ -107,6 +107,7 @@ data:
     masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
     podManagementPolicy: OrderedReady
     clusterHealthCheckParams: 'local=true'
+    maxUnavailable: 1
     extraEnvs:
       - name: DATA_PRESTOP_SLEEP
         value: "100"
@@ -188,6 +189,7 @@ data:
     masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
     podManagementPolicy: OrderedReady
     clusterHealthCheckParams: 'local=true'
+    maxUnavailable: 1
   wait:
     resources:
       - labels:
@@ -242,6 +244,7 @@ data:
     masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
     podManagementPolicy: OrderedReady
     clusterHealthCheckParams: 'local=true'
+    maxUnavailable: 1
   wait:
     resources:
       - labels:
@@ -443,14 +446,8 @@ data:
     # Mount the setup_script to main container for visibility
     # even though not used there.
     extraVolumeMounts:
-      - mountPath: /usr/share/filebeat/setup-script.sh
-        name: setupscript
-        subPath: setup-script.sh
-    extraVolumes:
-      - configMap:
-          defaultMode: 493
-          name: mon-filebeat
-        name: setupscript
+      - name: files
+        mountPath: /usr/share/filebeat/files
     tolerations:
       - key: "services"
         operator: "Equal"
