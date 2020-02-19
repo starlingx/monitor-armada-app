@@ -74,7 +74,7 @@ data:
   namespace: monitor
   release: elasticsearch-data
   source:
-    location: http://172.17.0.1:8080/helm_charts/starlingx/elasticsearch-7.4.0.tgz
+    location: http://172.17.0.1:8080/helm_charts/starlingx/elasticsearch-7.6.0.tgz
     reference: master
     subpath: elasticsearch
     type: tar
@@ -104,7 +104,8 @@ data:
       elastic-data: enabled
     imagePullSecrets: [{"name": "default-registry-key"}]
     esMajorVersion: 7
-    masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
+    masterService: 'mon-elasticsearch-master'
+    seedHosts: "mon-elasticsearch-master-headless, mon-elasticsearch-data-headless"
     podManagementPolicy: OrderedReady
     clusterHealthCheckParams: 'wait_for_no_relocating_shards&wait_for_no_initializing_shards&timeout=1s'
     maxUnavailable: 1
@@ -136,7 +137,7 @@ data:
   namespace: monitor
   release: elasticsearch-client
   source:
-    location: http://172.17.0.1:8080/helm_charts/starlingx/elasticsearch-7.4.0.tgz
+    location: http://172.17.0.1:8080/helm_charts/starlingx/elasticsearch-7.6.0.tgz
     reference: master
     subpath: elasticsearch
     type: tar
@@ -186,7 +187,8 @@ data:
       elastic-client: enabled
     imagePullSecrets: [{"name": "default-registry-key"}]
     esMajorVersion: 7
-    masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
+    masterService: 'mon-elasticsearch-master'
+    seedHosts: "mon-elasticsearch-master-headless, mon-elasticsearch-data-headless"
     podManagementPolicy: OrderedReady
     clusterHealthCheckParams: 'local=true'
     maxUnavailable: 1
@@ -211,7 +213,7 @@ data:
   namespace: monitor
   release: elasticsearch-master
   source:
-    location: http://172.17.0.1:8080/helm_charts/starlingx/elasticsearch-7.4.0.tgz
+    location: http://172.17.0.1:8080/helm_charts/starlingx/elasticsearch-7.6.0.tgz
     reference: master
     subpath: elasticsearch
     type: tar
@@ -241,7 +243,8 @@ data:
       elastic-master: enabled
     imagePullSecrets: [{"name": "default-registry-key"}]
     esMajorVersion: 7
-    masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
+    masterService: 'mon-elasticsearch-master'
+    seedHosts: "mon-elasticsearch-master-headless, mon-elasticsearch-data-headless"
     podManagementPolicy: OrderedReady
     clusterHealthCheckParams: 'local=true'
     maxUnavailable: 1
@@ -362,7 +365,7 @@ data:
       - 'source /tmp/cur_limits/set_factor.sh; echo LIMIT_FACTOR=$LIMIT_FACTOR; CD_GB=$(printenv COLLECTD_INDEX_LIMIT_GB);MB_GB=$(printenv METRICBEAT_INDEX_LIMIT_GB);FB_GB=$(printenv FILEBEAT_INDEX_LIMIT_GB);echo export COLLECTD_INDEX_LIMIT_GB=$(($CD_GB / $LIMIT_FACTOR)) > /tmp/cur_limits/new_limits.sh; echo export METRICBEAT_INDEX_LIMIT_GB=$(($MB_GB / $LIMIT_FACTOR)) >> /tmp/cur_limits/new_limits.sh;echo export FILEBEAT_INDEX_LIMIT_GB=$(($FB_GB / $LIMIT_FACTOR)) >> /tmp/cur_limits/new_limits.sh; source /tmp/cur_limits/new_limits.sh; cat /tmp/cur_limits/new_limits.sh; /curator/curator --config /etc/es-curator/config.yml /etc/es-curator/action_file.yml'
     extraInitContainers:
       limitset:
-        image: docker.elastic.co/beats/filebeat-oss:7.4.0
+        image: docker.elastic.co/beats/filebeat-oss:7.6.0
         command:
         - 'sh'
         - '-c'
@@ -416,41 +419,153 @@ data:
             release: mon-filebeat
             component: test
   values:
-    image:
-      repository: docker.elastic.co/beats/filebeat-oss
-      tag: 7.4.0
-      pullSecrets: ['default-registry-key']
-    monitoring:
-      enabled: true
-    config:
-      output.file:
-        enabled: false
-      output.logstash:
-        enabled: true
-        hosts: ["mon-logstash:5044"]
-      output.elasticsearch:
-        enabled: false
-        hosts: ["http://mon-elasticsearch-client:9200"]
-        ilm.pattern: "000001"
-        index: ${INDEX_NAME}-%{+yyyy.MM.dd}
-      setup.template:
-        name: ${INDEX_NAME}
-        pattern: ${INDEX_PATTERN}
-      setup.kibana:
-        #  Note port 5601 is default
-        host: "mon-kibana"
-      setup.dashboards:
-        enabled: true
-      filebeat.autodiscover:
-        providers:
-          - type: kubernetes
-            host: ${NODE_NAME}
-            hints.enabled: true
-    # Mount the setup_script to main container for visibility
-    # even though not used there.
+    filebeatConfig:
+      filebeat.yml:
+        filebeat.inputs:
+        - type: log
+          enabled: true
+          paths:
+            - /var/log/*.log
+            - /var/log/messages
+            - /var/log/syslog
+        - type: docker
+          containers.ids:
+          - '*'
+          processors:
+          - add_kubernetes_metadata:
+              in_cluster: true
+        output.file:
+          enabled: false
+        output.logstash:
+          enabled: true
+          hosts: ["mon-logstash:5044"]
+        output.elasticsearch:
+          enabled: false
+          hosts: "http://mon-elasticsearch-client:9200"
+          ilm.pattern: "000001"
+          index: ${INDEX_NAME}-%{+yyyy.MM.dd}
+        setup.template:
+          name: ${INDEX_NAME}
+          pattern: ${INDEX_PATTERN}
+        setup.kibana:
+          # Note port 5601 is default
+          host: "mon-kibana"
+        setup.dashboard:
+          enabled: true
+        filebeat.autodiscover:
+          providers:
+            - type: kubernetes
+              host: ${NODE_NAME}
+              hints.enabled: true
+      setup-script.sh: |
+        #!/bin/bash
+        #
+        # This is best effort to load the template into elasticsearch
+        # if beats are going to elasticsearch via logstash.
+        #
+        BEAT='filebeat'
+        BEAT_VER=$($BEAT version | awk '{print $3}')
+
+        ADDR=$OUTPUT_ELASTICSEARCH_HOSTS
+        ESPATH=$OUTPUT_ELASTICSEARCH_PATH
+
+        echo $ADDR$ESPATH
+
+        # Check if this is a map of entries.  If so, we'll only export the template
+        # to the first address
+        if [ ${ADDR: 0:1} == [ ] && [ ${ADDR: -1} == ] ]; then
+           # Remove the square brackets
+           ADDR=${ADDR:1:-1}
+           # Take the first entry in case there are more than one
+           ADDR=${ADDR%%,*}
+        fi
+        echo $ADDR$ESPATH
+
+        # Check if user has formatted with http:// on front, if not we need to add
+        HTTP='http://'
+        if [[ ${ADDR} == http* ]]; then
+           HTTP=''
+        fi
+        echo $HTTP
+
+        # Check for ip address containing special characters where -g must be used in curl command
+        # IPV6 Addresses should come in with square braces around the address.
+        CURL_G=''
+        if [[ ${ADDR} == *[* ]]; then
+           CURL_G=' -g  '
+        fi
+        echo $CURL_G
+
+        # check if logstash output is enabled, via crude parsing of the .yml file.
+        sed -e '/output.logstash/,/enabled:/!d' files/${BEAT}.yml  | grep -i true
+        if [[ $? -eq 0 ]]; then
+           echo "logstash configured, exporting template to elasticsearch"
+           $BEAT export template > /tmp/beat.template.json
+           # remove the lifecycle section of the yaml, as elasticsearch will choke
+           # on it as oss version does not support ilm.
+           sed -i '/lifecycle/,+3d' /tmp/beat.template.json
+
+           # "unset" is the special system name when none has been set through
+           # overrides..  We key on that to know what template name and index pattern to set
+           if [[ $SYSTEM_NAME_FOR_INDEX != unset ]]; then
+              # replace the standard index pattern with one including our system name,
+              # which will match our created indices
+              sed -i "s/$BEAT-$BEAT_VER/$BEAT-$BEAT_VER$SYSTEM_NAME_FOR_INDEX/g" /tmp/beat.template.json
+              # give the template a name with the system name appended.
+
+              # check if the template exists first before creating
+              curl -v $CURL_G -XGET -H "Content-Type: application/json" $HTTP$ADDR$ESPATH/_template/$BEAT-$BEAT_VER$SYSTEM_NAME_FOR_INDEX  | grep  "$BEAT-$BEAT_VER$SYSTEM_NAME_FOR_INDEX"
+              if [[ $? -ne 0 ]];  then
+                 echo "$BEAT-$BEAT_VER$SYSTEM_NAME_FOR_INDEX template not found, creating..."
+                 curl -v $CURL_G -XPUT -H "Content-Type: application/json" $HTTP$ADDR$ESPATH/_template/$BEAT-$BEAT_VER$SYSTEM_NAME_FOR_INDEX -d@/tmp/beat.template.json
+              else
+                 echo "$BEAT-$BEAT_VER$SYSTEM_NAME_FOR_INDEX template found, not creating..."
+              fi
+           else
+              # apply a higher order to this template in case there are templates with system names
+              # which should be applied first
+              curl -v $CURL_G -XGET -H "Content-Type: application/json" $HTTP$ADDR$ESPATH/_template/$BEAT-$BEAT_VER | grep  "$BEAT-$BEAT_VER"
+              if [[ $? -ne 0 ]];  then
+                 echo "$BEAT-$BEAT_VER template not found, creating..."
+                 sed -i "s/\"order\": 1/\"order\": 2/g" /tmp/beat.template.json
+                 curl -v $CURL_G -XPUT -H "Content-Type: application/json" $HTTP$ADDR$ESPATH/_template/$BEAT-$BEAT_VER -d@/tmp/beat.template.json
+              else
+                 echo "$BEAT-$BEAT_VER template found, not creating..."
+              fi
+           fi
+        else
+           echo "logstash not configured, not exporting template, should be done for us."
+        fi
+        # Above is non-fatal if there is a problem.  Always pass.
+        exit 0
+    extraInitContainers:
+      "setup-script":
+        container:
+          command:
+            - /bin/bash
+            - -c
+            - /usr/share/filebeat/files/setup-script.sh
+          volumeMounts:
+            - name: setup-script
+              mountPath: /usr/share/filebeat/files
+            - name: setup-script
+              mountPath: /usr/share/filebeat/filebeat.yml
+              subPath: filebeat.yml
+    extraVolumes:
+      - name: setup-script
+        configMap:
+          defaultMode: 0755
+          name: mon-filebeat-config
+      - name: varlog
+        hostPath:
+          path: /var/log
     extraVolumeMounts:
-      - name: files
-        mountPath: /usr/share/filebeat/files
+      - name: varlog
+        mountPath: /var/log
+        readOnly: true
+    image: docker.elastic.co/beats/filebeat-oss
+    imageTag: 7.6.0
+    imagePullSecrets: [{"name": "default-registry-key"}]
     tolerations:
       - key: "services"
         operator: "Equal"
@@ -458,7 +573,7 @@ data:
         effect: "NoExecute"
   source:
     type: tar
-    location: http://172.17.0.1:8080/helm_charts/starlingx/filebeat-1.5.1.tgz
+    location: http://172.17.0.1:8080/helm_charts/starlingx/filebeat-7.6.0.tgz
     subpath: filebeat
     reference: master
   dependencies: []
@@ -491,13 +606,8 @@ data:
             release: mon-metricbeat
             component: test
   values:
-    image:
-      repository: docker.elastic.co/beats/metricbeat-oss
-      tag: 7.4.0
-    serviceAccount:
-      imagePullSecrets: [{"name": "default-registry-key"}]
-    daemonset:
-      config:
+    metricbeatConfig:
+      metricbeat.yml:
         output.file:
           enabled: false
         output.logstash:
@@ -506,7 +616,7 @@ data:
         output.elasticsearch:
           # this must be opposite of above output.logstash.enabled
           enabled: false
-          hosts: ["http://mon-elasticsearch-client:9200"]
+          hosts: "http://mon-elasticsearch-client:9200"
           ilm.pattern: "000001"
           index: ${INDEX_NAME}-%{+yyyy.MM.dd}
         setup.template:
@@ -520,38 +630,29 @@ data:
           host: "mon-kibana"
         setup.dashboards:
           enabled: true
-      metricbeat.autodiscover:
-        providers:
-          - type: kubernetes
-            host: ${NODE_NAME}
-            hints.enabled: true
-      tolerations:
-        - key: "services"
-          operator: "Equal"
-          value: "disabled"
-          effect: "NoExecute"
-    deployment:
-      nodeSelector:
-        elastic-controller: "enabled"
-      config:
+        metricbeat.autodiscover:
+          providers:
+            - type: kubernetes
+              host: ${NODE_NAME}
+              hints.enabled: true
+      kube-state-metrics-metricbeat.yml:
         output.file:
           enabled: false
         output.logstash:
           enabled: true
           hosts: ["mon-logstash:5044"]
         output.elasticsearch:
+          # this must be opposite of above output.logstash.enabled
           enabled: false
-          hosts: ["http://mon-elasticsearch-client:9200"]
+          hosts: "http://mon-elasticsearch-client:9200"
           ilm.pattern: "000001"
           index: ${INDEX_NAME}-%{+yyyy.MM.dd}
         setup.template:
           name: ${INDEX_NAME}
           pattern: ${INDEX_PATTERN}
         setup.kibana:
-          # for onbox kibana, note port 5601 is default
+          # for on box kibana, note port 5601 is default
           host: "mon-kibana"
-          # for offbox kibana, will fail if we can't connect
-          # host: "128.224.140.223"
         setup.dashboards:
           enabled: true
         metricbeat.autodiscover:
@@ -559,6 +660,100 @@ data:
             - type: kubernetes
               host: ${NODE_NAME}
               hints.enabled: true
+      setup-script.sh: |
+        #!/bin/bash
+        #
+        # This is best effort to load the template into elasticsearch
+        # if beats are going to elasticsearch via logstash.
+        #
+        BEAT='metricbeat'
+        BEAT_VER=$($BEAT version | awk '{print $3}')
+
+        ADDR=$OUTPUT_ELASTICSEARCH_HOSTS
+        ESPATH=$OUTPUT_ELASTICSEARCH_PATH
+
+        echo $ADDR$ESPATH
+
+        # Check if this is a map of entries.  If so, we'll only export the template
+        # to the first address
+        if [ ${ADDR: 0:1} == [ ] && [ ${ADDR: -1} == ] ]; then
+           # Remove the square brackets
+           ADDR=${ADDR:1:-1}
+           # Take the first entry in case there are more than one
+           ADDR=${ADDR%%,*}
+        fi
+        echo $ADDR$ESPATH
+
+        # Check if user has formatted with http:// on front, if not we need to add
+        HTTP='http://'
+        if [[ ${ADDR} == http* ]]; then
+           HTTP=''
+        fi
+        echo $HTTP
+
+        # Check for ip address containing special characters where -g must be used in curl command
+        # IPV6 Addresses should come in with square braces around the address.
+        CURL_G=''
+        if [[ ${ADDR} == *[* ]]; then
+           CURL_G=' -g  '
+        fi
+        echo $CURL_G
+
+        # check if logstash output is enabled, via crude parsing of the .yml file.
+        sed -e '/output.logstash/,/enabled:/!d' files/${BEAT}.yml  | grep -i true
+        if [[ $? -eq 0 ]]; then
+           echo "logstash configured, exporting template to elasticsearch"
+           $BEAT export template > /tmp/beat.template.json
+           # remove the lifecycle section of the yaml, as elasticsearch will choke
+           # on it as oss version does not support ilm.
+           sed -i '/lifecycle/,+3d' /tmp/beat.template.json
+
+           # "unset" is the special system name when none has been set through
+           # overrides..  We key on that to know what template name and index pattern to set
+           if [[ $SYSTEM_NAME_FOR_INDEX != unset ]]; then
+              # replace the standard index pattern with one including our system name,
+              # which will match our created indices
+              sed -i "s/$BEAT-$BEAT_VER/$BEAT-$BEAT_VER$SYSTEM_NAME_FOR_INDEX/g" /tmp/beat.template.json
+              # give the template a name with the system name appended.
+
+              # check if the template exists first before creating
+              curl -v $CURL_G -XGET -H "Content-Type: application/json" $HTTP$ADDR$ESPATH/_template/$BEAT-$BEAT_VER$SYSTEM_NAME_FOR_INDEX  | grep  "$BEAT-$BEAT_VER$SYSTEM_NAME_FOR_INDEX"
+              if [[ $? -ne 0 ]];  then
+                 echo "$BEAT-$BEAT_VER$SYSTEM_NAME_FOR_INDEX template not found, creating..."
+                 curl -v $CURL_G -XPUT -H "Content-Type: application/json" $HTTP$ADDR$ESPATH/_template/$BEAT-$BEAT_VER$SYSTEM_NAME_FOR_INDEX -d@/tmp/beat.template.json
+              else
+                 echo "$BEAT-$BEAT_VER$SYSTEM_NAME_FOR_INDEX template found, not creating..."
+              fi
+           else
+              # apply a higher order to this template in case there are templates with system names
+              # which should be applied first
+              curl -v $CURL_G -XGET -H "Content-Type: application/json" $HTTP$ADDR$ESPATH/_template/$BEAT-$BEAT_VER | grep  "$BEAT-$BEAT_VER"
+              if [[ $? -ne 0 ]];  then
+                 echo "$BEAT-$BEAT_VER template not found, creating..."
+                 sed -i "s/\"order\": 1/\"order\": 2/g" /tmp/beat.template.json
+                 curl -v $CURL_G -XPUT -H "Content-Type: application/json" $HTTP$ADDR$ESPATH/_template/$BEAT-$BEAT_VER -d@/tmp/beat.template.json
+              else
+                 echo "$BEAT-$BEAT_VER template found, not creating..."
+              fi
+           fi
+        else
+           echo "logstash not configured, not exporting template, should be done for us."
+        fi
+        # Above is non-fatal if there is a problem.  Always pass.
+        exit 0
+    extraInitContainers:
+      "setup-script":
+        container:
+          command:
+            - /bin/bash
+            - -c
+            - /usr/share/metricbeat/files/setup-script.sh
+          volumeMounts:
+            - name: setup-script
+              mountPath: /usr/share/metricbeat/files
+            - name: setup-script
+              mountPath: /usr/share/metricbeat/metricbeat.yml
+              subPath: metricbeat.yml
     extraVolumeMounts:
       - name: root
         mountPath: /hostfs
@@ -568,9 +763,51 @@ data:
       - name: root
         hostPath:
           path: /
+      - name: setup-script
+        configMap:
+          defaultMode: 0755
+          name: mon-metricbeat-config
+    extraEnvs:
+      - name: KUBE_STATE_METRICS_HOSTS
+        value: http://mon-kube-state-metrics:8080
+    image: docker.elastic.co/beats/metricbeat-oss
+    imageTag: 7.6.0
+    imagePullPolicy: "IfNotPresent"
+    imagePullSecrets: [{"name": "default-registry-key"}]
+    clusterRoleRules:
+    - apiGroups: [""]
+      resources:
+      - nodes
+      - namespaces
+      - events
+      - pods
+      verbs: ["get", "list", "watch"]
+    - apiGroups: ["extensions"]
+      resources:
+      - replicasets
+      verbs: ["get", "list", "watch"]
+    - apiGroups: ["apps"]
+      resources:
+      - statefulsets
+      - deployments
+      verbs: ["get", "list", "watch"]
+    - apiGroups: [""]
+      resources:
+      - nodes/stats
+      - nodes/metrics
+      verbs: ["get"]
+    - nonResourceURLs: ["/metrics"]
+      verbs: ["get"]
+    tolerations:
+      - key: "services"
+        operator: "Equal"
+        value: "disabled"
+        effect: "NoExecute"
+    nodeSelector:
+      elastic-controller: "enabled"
   source:
     type: tar
-    location: http://172.17.0.1:8080/helm_charts/starlingx/metricbeat-1.6.0.tgz
+    location: http://172.17.0.1:8080/helm_charts/starlingx/metricbeat-7.6.0.tgz
     subpath: metricbeat
     reference: master
   dependencies: []
@@ -652,10 +889,9 @@ data:
             release: mon-kibana
             component: test
   values:
-    image:
-      repository: docker.elastic.co/kibana/kibana-oss
-      tag: 7.4.0
-      pullSecrets: [{'name': 'default-registry-key'}]
+    image: docker.elastic.co/kibana/kibana-oss
+    imageTag: 7.6.0
+    imagePullSecrets: [{'name': 'default-registry-key'}]
     ingress:
       enabled: true
       annotations:
@@ -665,15 +901,13 @@ data:
         nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
       hosts:
         - ""
-    files:
-      kibana.yml:
-        elasticsearch.hosts: http://mon-elasticsearch-client:9200
-        server.host: "::"
+    elasticsearchHosts: "http://mon-elasticsearch-client:9200"
+    serverHost: "::"
     nodeSelector:
       elastic-controller: "enabled"
   source:
     type: tar
-    location: http://172.17.0.1:8080/helm_charts/starlingx/kibana-2.2.0.tgz
+    location: http://172.17.0.1:8080/helm_charts/starlingx/kibana-7.6.0.tgz
     subpath: kibana
     reference: master
   dependencies: []
@@ -710,54 +944,8 @@ data:
             release: mon-logstash
             component: test
   values:
-    image:
-      repository: docker.elastic.co/logstash/logstash-oss
-      tag: 7.4.0
-      pullSecrets: [{"name": "default-registry-key"}]
-    exporter:
-      logstash:
-        image:
-          repository: null
-          tag: null
-    nodeSelector:
-      elastic-controller: "enabled"
-    elasticsearch:
-      host: mon-elasticsearch-client
-    config:
-      elasticsearch.path: ""
-      queue.type: "memory"
-    persistence:
-      enabled: false
-    livenessProbe:
-      initialDelaySeconds: 90
-      periodSeconds: 60
-      timeoutSeconds: 60
-    readinessProbe:
-      initialDelaySeconds: 90
-      periodSeconds: 60
-      timeoutSeconds: 60
-    outputs:
-      main: |-
-        output {
-          # Note uncomment below and can see raw input in logs
-          #stdout { codec => rubydebug }
-          if [type] == "collectd" {
-            elasticsearch {
-              hosts => ["${ELASTICSEARCH_HOST}:${ELASTICSEARCH_PORT}${ELASTICSEARCH_PATH}"]
-              manage_template => false
-              index => "collectd${SYSTEM_NAME_FOR_INDEX}-%{+YYYY.MM.dd}"
-            }
-          }
-          if [type] == "beats" {
-            elasticsearch {
-              hosts => ["${ELASTICSEARCH_HOST}:${ELASTICSEARCH_PORT}${ELASTICSEARCH_PATH}"]
-              manage_template => false
-              index => "%{[@metadata][beat]}-%{[@metadata][version]}${SYSTEM_NAME_FOR_INDEX}-%{+YYYY.MM.dd}"
-            }
-          }
-        }
-    inputs:
-      main: |-
+    logstashPipeline:
+      logstash.conf: |
         input {
           udp {
             #Note default port 25826 in use by influxdb.
@@ -773,8 +961,6 @@ data:
             type => 'beats'
           }
         }
-    filters:
-      main: |-
         filter {
           mutate {
             gsub => [
@@ -783,6 +969,40 @@ data:
             ]
           }
         }
+        output {
+          # Note uncomment below and can see raw input in logs
+          #stdout { codec => rubydebug }
+          if [type] == "collectd" {
+            elasticsearch {
+              hosts => ["${ELASTICSEARCH_HOST}"]
+              manage_template => false
+              index => "collectd${SYSTEM_NAME_FOR_INDEX}-%{+YYYY.MM.dd}"
+            }
+          }
+          if [type] == "beats" {
+            elasticsearch {
+              hosts => ["${ELASTICSEARCH_HOST}"]
+              manage_template => false
+              index => "%{[@metadata][beat]}-%{[@metadata][version]}${SYSTEM_NAME_FOR_INDEX}-%{+YYYY.MM.dd}"
+            }
+          }
+        }
+    image: docker.elastic.co/logstash/logstash-oss
+    imageTag: 7.6.0
+    imagePullSecrets: [{"name": "default-registry-key"}]
+    elasticsearchHosts: "http://mon-elasticsearch-client:9200"
+    nodeSelector:
+      elastic-controller: "enabled"
+    persistence:
+      enabled: false
+    livenessProbe:
+      initialDelaySeconds: 90
+      periodSeconds: 60
+      timeoutSeconds: 60
+    readinessProbe:
+      initialDelaySeconds: 90
+      periodSeconds: 60
+      timeoutSeconds: 60
     ports:
       # influxdb port conflict, can't use 25826
       # - containerPort: 25826
@@ -796,33 +1016,21 @@ data:
         protocol: TCP
     service:
       ports:
-        # collectd-udp:
-        # port: 25826
-        # targetPort: collectd-udp
-        # protocol: UDP
-        collectd-udp:
+        - name: collectd-udp
           port: 31005
           targetPort: collectd-udp
           protocol: UDP
-        monitor:
+        - name: monitor
           port: 9600
           targetPort: monitor
           protocol: TCP
-
-    ingress:
-      enabled: true
-      annotations:
-        kubernetes.io/ingress.class: "nginx"
-        nginx.ingress.kubernetes.io/rewrite-target: /$2
-        nginx.ingress.kubernetes.io/ssl-redirect: "false"
-        nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
-      path: /mon-logstash(/|$)(.*)
-      servicePort: 9600
-      hosts:
-        - ""
+        - name: beats
+          port: 5044
+          targetPort: beats
+          protocol: TCP
   source:
     type: tar
-    location: http://172.17.0.1:8080/helm_charts/starlingx/logstash-1.7.0.tgz
+    location: http://172.17.0.1:8080/helm_charts/starlingx/logstash-7.6.0.tgz
     subpath: logstash
     reference: master
   dependencies: []
@@ -917,9 +1125,9 @@ data:
   release_prefix: mon
   chart_groups:
     - nginx-ingress
-    - kibana
     - elasticsearch
     - elasticsearch-curator
+    - kibana
     - logstash
     - filebeat
     - metricbeat

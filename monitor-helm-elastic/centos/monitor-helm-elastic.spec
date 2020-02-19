@@ -1,4 +1,4 @@
-%global sha 2bd7616ceddbdf2eee88965e2028ee37d304c79c
+%global sha 945017287598479ba8653d9baf3ff26f7fe31e50
 %global helm_folder  /usr/lib/helm
 %global helmchart_version 0.1.0
 %global _default_patch_flags --no-backup-if-mismatch --prefix=/tmp/junk
@@ -19,11 +19,10 @@ Source2: index.yaml
 BuildArch:     noarch
 
 Patch01: 0001-add-makefile.patch
-Patch02: 0002-Add-compatibility-for-k8s-1.16.patch
-Patch03: 0003-use-oss-image.patch
-Patch04: 0004-Update-to-Elastic-7.4.0-Release.patch
-Patch05: 0005-set-initial-masters-to-master-0.patch
-Patch06: 0006-readiness-probe-enhancements.patch
+Patch02: 0002-use-oss-image.patch
+Patch03: 0003-set-initial-masters-to-master-0.patch
+Patch04: 0004-Update-Elastic-Apps-to-7.6.0-Releases.patch
+Patch05: 0005-readiness-probe-enhancements.patch
 
 BuildRequires: helm
 
@@ -37,7 +36,6 @@ Monitor Helm elasticsearch charts
 %patch03 -p1
 %patch04 -p1
 %patch05 -p1
-%patch06 -p1
 
 %build
 # initialize helm and build the toolkit
@@ -66,7 +64,15 @@ helm repo add local http://localhost:8879/charts
 
 # Create the tgz files
 rm elasticsearch/Makefile
+rm kibana/Makefile
+rm filebeat/Makefile
+rm metricbeat/Makefile
+rm logstash/Makefile
 make elasticsearch
+make kibana
+make filebeat
+make metricbeat
+make logstash
 
 # terminate helm server (the last backgrounded task)
 kill %1

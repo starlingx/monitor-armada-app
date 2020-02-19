@@ -86,12 +86,8 @@ helm repo add local http://localhost:8879/charts
 
 # Create the tgz files
 cd stable
-make filebeat
-make metricbeat
 make kube-state-metrics
-make kibana
 make nginx-ingress
-make logstash
 make elasticsearch-curator
 
 # terminate helm server (the last backgrounded task)

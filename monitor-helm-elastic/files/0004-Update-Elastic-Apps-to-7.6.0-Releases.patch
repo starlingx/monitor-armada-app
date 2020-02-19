@@ -1,0 +1,944 @@
+From cf8a4f75684e78920f1c464d06558daa8fc61fbc Mon Sep 17 00:00:00 2001
+From: Simon Cousineau <Simon.Cousineau@windriver.com>
+Date: Mon, 6 Apr 2020 18:10:31 -0400
+Subject: [PATCH 1/1] Update Elastic Apps to 7.6.0 Releases
+
+---
+ elasticsearch/templates/statefulset.yaml |  5 ++
+ elasticsearch/values.yaml                |  2 +
+ filebeat/templates/_helpers.tpl          |  9 +++
+ filebeat/templates/configmap.yaml        |  4 +
+ filebeat/templates/daemonset.yaml        | 92 ++++++++++++++++++++++-
+ filebeat/values.yaml                     | 16 +++-
+ kibana/templates/_helpers.tpl            | 24 +++++-
+ kibana/templates/deployment.yaml         |  8 +-
+ kibana/templates/service.yaml            | 26 ++++++-
+ kibana/templates/serviceaccount.yaml     | 11 +++
+ logstash/templates/_helpers.tpl          |  5 ++
+ logstash/templates/configmap-config.yaml |  4 +
+ logstash/templates/statefulset.yaml      | 49 +++++++++++-
+ logstash/values.yaml                     | 19 +++--
+ metricbeat/requirements.yaml             |  8 +-
+ metricbeat/templates/_helpers.tpl        |  9 +++
+ metricbeat/templates/configmap.yaml      |  4 +
+ metricbeat/templates/daemonset.yaml      | 92 ++++++++++++++++++++++-
+ metricbeat/templates/deployment.yaml     | 96 +++++++++++++++++++++++-
+ metricbeat/templates/serviceaccount.yaml |  2 +
+ metricbeat/values.yaml                   | 20 +++--
+ 21 files changed, 468 insertions(+), 37 deletions(-)
+ create mode 100644 kibana/templates/serviceaccount.yaml
+
+diff --git a/elasticsearch/templates/statefulset.yaml b/elasticsearch/templates/statefulset.yaml
+index 5217270..61b59af 100644
+--- a/elasticsearch/templates/statefulset.yaml
++++ b/elasticsearch/templates/statefulset.yaml
+@@ -251,8 +251,13 @@ spec:
+           - name: discovery.zen.ping.unicast.hosts
+             value: "{{ template "elasticsearch.masterService" . }}-headless"
+           {{- else }}
++          {{- if empty .Values.seedHosts }}
+           - name: discovery.seed_hosts
+             value: "{{ template "elasticsearch.masterService" . }}-headless"
++          {{- else }}
++          - name: discovery.seed_hosts
++            value: "{{ .Values.seedHosts }}"
++          {{- end }}
+           {{- end }}
+           - name: cluster.name
+             value: "{{ .Values.clusterName }}"
+diff --git a/elasticsearch/values.yaml b/elasticsearch/values.yaml
+index e2a5d96..a446316 100755
+--- a/elasticsearch/values.yaml
++++ b/elasticsearch/values.yaml
+@@ -259,3 +259,5 @@ sysctlInitContainer:
+   enabled: true
+ 
+ keystore: []
++
++seedHosts: ""
+diff --git a/filebeat/templates/_helpers.tpl b/filebeat/templates/_helpers.tpl
+index a52a937..df294e9 100755
+--- a/filebeat/templates/_helpers.tpl
++++ b/filebeat/templates/_helpers.tpl
+@@ -9,15 +9,20 @@ Expand the name of the chart.
+ {{/*
+ Create a default fully qualified app name.
+ We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
++If release name contains chart name it will be used as a full name.
+ */}}
+ {{- define "filebeat.fullname" -}}
+ {{- if .Values.fullnameOverride -}}
+ {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+ {{- else -}}
+ {{- $name := default .Chart.Name .Values.nameOverride -}}
++{{- if contains $name .Release.Name -}}
++{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
++{{- else -}}
+ {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+ {{- end -}}
+ {{- end -}}
++{{- end -}}
+ 
+ {{/*
+ Use the fullname if the serviceAccount value is not set
+@@ -27,6 +32,10 @@ Use the fullname if the serviceAccount value is not set
+ {{- .Values.serviceAccount -}}
+ {{- else }}
+ {{- $name := default .Chart.Name .Values.nameOverride -}}
++{{- if contains $name .Release.Name -}}
++{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
++{{- else -}}
+ {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+ {{- end -}}
+ {{- end -}}
++{{- end -}}
+diff --git a/filebeat/templates/configmap.yaml b/filebeat/templates/configmap.yaml
+index 32df8d8..581179f 100644
+--- a/filebeat/templates/configmap.yaml
++++ b/filebeat/templates/configmap.yaml
+@@ -12,6 +12,10 @@ metadata:
+ data:
+ {{- range $path, $config := .Values.filebeatConfig }}
+   {{ $path }}: |
++{{- if eq $path "filebeat.yml" }}
++{{ toYaml $config | indent 4 -}}
++{{- else }}
+ {{ $config | indent 4 -}}
+ {{- end -}}
+ {{- end -}}
++{{- end -}}
+diff --git a/filebeat/templates/daemonset.yaml b/filebeat/templates/daemonset.yaml
+index d2f5a23..6e8be91 100644
+--- a/filebeat/templates/daemonset.yaml
++++ b/filebeat/templates/daemonset.yaml
+@@ -26,7 +26,7 @@ spec:
+         {{- end }}
+         {{/* This forces a restart if the configmap has changed */}}
+         {{- if .Values.filebeatConfig }}
+-        configChecksum: {{ include (print .Template.BasePath "/configmap.yaml") . | sha256sum | trunc 63 }}
++        configchecksum: {{ toYaml .Values.filebeatConfig | sha256sum | trunc 63 }}
+         {{- end }}
+       name: "{{ template "filebeat.fullname" . }}"
+       labels:
+@@ -87,10 +87,64 @@ spec:
+       {{- end }}
+       {{- if .Values.extraInitContainers }}
+       initContainers:
+-{{ toYaml .Values.extraInitContainers | indent 8 }}
++{{- range $name, $config := .Values.extraInitContainers }}
++        - name: {{ $name }}
++{{- if $config.image }}
++          image: "{{ $config.image.repository }}:{{ $config.image.tag }}"
++          imagePullPolicy: {{ $config.image.pullPolicy }}
++{{- else }}
++          image: "{{ $.Values.image }}:{{ $.Values.imageTag }}"
++          imagePullPolicy: {{ $.Values.imagePullPolicy }}
++{{- end }}
++{{ toYaml $config.container | indent 10 }}
++          env:
++            - name: POD_NAMESPACE
++              valueFrom:
++                fieldRef:
++                  fieldPath: metadata.namespace
++            - name: NODE_NAME
++              valueFrom:
++                fieldRef:
++                  fieldPath: spec.nodeName
++            ## make output.elasticsearch parms visible
++            {{- range $path, $config := $.Values.filebeatConfig}}
++            {{- if eq $path "filebeat.yml" -}}
++            {{- range $key, $value := $config}}
++            {{- $configname := $key | upper | replace "." "_" }}
++            {{- if eq $configname "OUTPUT_ELASTICSEARCH" -}}
++            {{- range $key2, $value2 := $value}}
++            - name: "{{ $configname }}_{{ $key2 | upper }}"
++              value: {{ $value2 | quote }}
++            {{- end }}
++            {{- end }}
++            {{- end }}
++            {{- end }}
++            {{- end }}
++            ## make system name and index parms visible
++            {{- if $.Values.systemNameForIndex}}
++            {{  $systemNameNoSpecial := regexReplaceAll "[^A-Za-z0-9-]+" $.Values.systemNameForIndex "" }}
++            {{  $systemNameFormatted := $systemNameNoSpecial | lower | trunc 200 }}
++            - name: SYSTEM_NAME_FOR_INDEX
++              value: {{ printf "-%s" $systemNameFormatted | quote }}
++            - name: INDEX_PATTERN
++              value: "{{ $.Values.indexNamePrefix }}-{{$systemNameFormatted}}-*"
++            - name: INDEX_NAME
++              value: "{{ $.Values.indexNamePrefix }}-{{$systemNameFormatted}}"
++            {{- else }}
++            - name: SYSTEM_NAME_FOR_INDEX
++              value: "unset"
++            - name: INDEX_PATTERN
++              value: "{{ $.Values.indexNamePrefix }}-*"
++            - name: INDEX_NAME
++              value: "{{ $.Values.indexNamePrefix }}"
++            {{- end }}
++{{- if $.Values.extraEnvs }}
++{{ toYaml $.Values.extraEnvs | indent 12 }}
++{{- end }}
++{{- end }}
+       {{- end }}
+       containers:
+-      - name: "filebeat"
++      - name: {{ template "filebeat.name" . }}
+         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+         imagePullPolicy: "{{ .Values.imagePullPolicy }}"
+         args:
+@@ -112,6 +166,38 @@ spec:
+           valueFrom:
+             fieldRef:
+               fieldPath: spec.nodeName
++      ## make output.elasticsearch parms visible
++      {{- range $path, $config := .Values.filebeatConfig}}
++      {{- if eq $path "filebeat.yml" -}}
++      {{- range $key, $value := $config}}
++      {{- $configname := $key | upper | replace "." "_" }}
++      {{- if eq $configname "OUTPUT_ELASTICSEARCH" -}}
++      {{- range $key2, $value2 := $value}}
++        - name: "{{ $configname }}_{{ $key2 | upper }}"
++          value: {{ $value2 | quote }}
++      {{- end }}
++      {{- end }}
++      {{- end }}
++      {{- end }}
++      {{- end }}
++      ## make system name and index parms visible
++      {{- if .Values.systemNameForIndex}}
++      {{  $systemNameNoSpecial := regexReplaceAll "[^A-Za-z0-9-]+" .Values.systemNameForIndex "" }}
++      {{  $systemNameFormatted := $systemNameNoSpecial | lower | trunc 200 }}
++        - name: SYSTEM_NAME_FOR_INDEX
++          value: {{ printf "-%s" $systemNameFormatted | quote }}
++        - name: INDEX_PATTERN
++          value: "{{ .Values.indexNamePrefix }}-{{$systemNameFormatted}}-*"
++        - name: INDEX_NAME
++          value: "{{ .Values.indexNamePrefix }}-{{$systemNameFormatted}}"
++      {{- else }}
++        - name: SYSTEM_NAME_FOR_INDEX
++          value: "unset"
++        - name: INDEX_PATTERN
++          value: "{{ .Values.indexNamePrefix }}-*"
++        - name: INDEX_NAME
++          value: "{{ .Values.indexNamePrefix }}"
++      {{- end }}
+ {{- if .Values.extraEnvs }}
+ {{ toYaml .Values.extraEnvs | indent 8 }}
+ {{- end }}
+diff --git a/filebeat/values.yaml b/filebeat/values.yaml
+index d3c575c..f83a19f 100755
+--- a/filebeat/values.yaml
++++ b/filebeat/values.yaml
+@@ -2,7 +2,7 @@
+ # Allows you to add any config files in /usr/share/filebeat
+ # such as filebeat.yml
+ filebeatConfig:
+-  filebeat.yml: |
++  filebeat.yml:
+     filebeat.inputs:
+     - type: docker
+       containers.ids:
+@@ -36,9 +36,13 @@ extraContainers: ""
+ #   command: ['echo', 'hey']
+ 
+ extraInitContainers: []
+-# - name: dummy-init
+-#   image: busybox
+-#   command: ['echo', 'hey']
++  # "dummy-init":
++  #   image:
++  #     repository: busybox
++  #     tag: latest
++  #     pullPolicy: IfNotPresent
++  #   container:
++  #     command: ['echo', 'hey']
+ 
+ envFrom: []
+ # - configMapRef:
+@@ -132,3 +136,7 @@ updateStrategy: RollingUpdate
+ # Only edit these if you know what you're doing
+ nameOverride: ""
+ fullnameOverride: ""
++
++# Will be used in index name
++systemNameForIndex: ""
++indexNamePrefix: filebeat-%{[agent.version]}
+diff --git a/kibana/templates/_helpers.tpl b/kibana/templates/_helpers.tpl
+index 2fe259e..0558ced 100755
+--- a/kibana/templates/_helpers.tpl
++++ b/kibana/templates/_helpers.tpl
+@@ -9,13 +9,18 @@ Expand the name of the chart.
+ {{/*
+ Create a default fully qualified app name.
+ We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
++If release name contains chart name it will be used as a full name.
+ */}}
+ {{- define "kibana.fullname" -}}
+ {{- if .Values.fullnameOverride -}}
+ {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+ {{- else -}}
+-{{- $name := default .Release.Name .Values.nameOverride -}}
+-{{- printf "%s-%s" $name .Chart.Name | trunc 63 | trimSuffix "-" -}}
++{{- $name := default .Chart.Name .Values.nameOverride -}}
++{{- if contains $name .Release.Name -}}
++{{- printf .Release.Name | trunc 63 | trimSuffix "-" -}}
++{{- else -}}
++{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
++{{- end -}}
+ {{- end -}}
+ {{- end -}}
+ 
+@@ -29,3 +34,18 @@ Return the appropriate apiVersion for ingress.
+ {{- print "networking.k8s.io/v1beta1" -}}
+ {{- end -}}
+ {{- end -}}
++
++{{/*
++Create the name of the service account to use
++*/}}
++{{- define "serviceAccountName" -}}
++{{- if .Values.serviceAccountCreate -}}
++{{ default (include "kibana.fullname" .) .Values.serviceAccountName }}
++{{- else -}}
++{{- if .Values.serviceAccountName -}}
++{{- .Values.serviceAccountName }}
++{{- else -}}
++{{ default "default" .Values.serviceAccountName }}
++{{- end -}}
++{{- end -}}
++{{- end -}}
+diff --git a/kibana/templates/deployment.yaml b/kibana/templates/deployment.yaml
+index ad563b3..15343eb 100644
+--- a/kibana/templates/deployment.yaml
++++ b/kibana/templates/deployment.yaml
+@@ -14,12 +14,12 @@ spec:
+ {{ toYaml .Values.updateStrategy | indent 4 }}
+   selector:
+     matchLabels:
+-      app: kibana
++      app: {{ template "kibana.name" . }}
+       release: {{ .Release.Name | quote }}
+   template:
+     metadata:
+       labels:
+-        app: kibana
++        app: {{ template "kibana.name" . }}
+         release: {{ .Release.Name | quote }}
+         {{- range $key, $value := .Values.labels }}
+         {{ $key }}: {{ $value | quote }}
+@@ -30,7 +30,7 @@ spec:
+         {{- end }}
+         {{/* This forces a restart if the configmap has changed */}}
+         {{- if .Values.kibanaConfig }}
+-        configchecksum: {{ include (print .Template.BasePath "/configmap.yaml") . | sha256sum | trunc 63 }}
++        configchecksum: {{ toYaml .Values.kibanaConfig | sha256sum | trunc 63 }}
+         {{- end }}
+     spec:
+ {{- if .Values.priorityClassName }}
+@@ -73,7 +73,7 @@ spec:
+ {{ tpl .Values.extraInitContainers . | indent 6 }}
+       {{- end }}
+       containers:
+-      - name: kibana
++      - name: {{ template "kibana.name" . }}
+         securityContext:
+ {{ toYaml .Values.securityContext | indent 10 }}
+         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+diff --git a/kibana/templates/service.yaml b/kibana/templates/service.yaml
+index 5734580..c2f8d9e 100644
+--- a/kibana/templates/service.yaml
++++ b/kibana/templates/service.yaml
+@@ -20,14 +20,36 @@ spec:
+   loadBalancerSourceRanges:
+ {{ toYaml . | indent 4 }}
+ {{- end }}
++  {{- if and (eq .Values.service.type "ClusterIP") .Values.service.clusterIP }}
++  clusterIP: {{ .Values.service.clusterIP }}
++  {{- end }}
+   ports:
+     - port: {{ .Values.service.port }}
+ {{- if .Values.service.nodePort }}
+       nodePort: {{ .Values.service.nodePort }}
+ {{- end }}
+       protocol: TCP
+-      name: http
+-      targetPort: {{ .Values.httpPort }}
++{{ if (and (eq .Values.service.type "NodePort") (not (empty .Values.service.nodePort))) }}
++      nodePort: {{ .Values.service.nodePort }}
++{{ end }}
++{{- if .Values.service.portName }}
++      name: {{ .Values.service.portName }}
++{{- end }}
++{{- if not .Values.authProxyEnabled }}
++      targetPort: {{ .Values.service.internalPort }}
++{{- else }}
++      targetPort: {{ .Values.service.authProxyPort }}
++{{- end }}
++{{- if .Values.service.externalIPs }}
++  externalIPs:
++{{ toYaml .Values.service.externalIPs | indent 4 }}
++{{- end }}
+   selector:
+     app: {{ .Chart.Name }}
+     release: {{ .Release.Name | quote }}
++{{- range $key, $value := .Values.service.selector }}
++    {{ $key }}: {{ $value | quote }}
++{{- end }}
++{{- if .Values.service.loadBalancerIP }}
++  loadBalancerIP: {{ .Values.service.loadBalancerIP }}
++{{- end }}
+diff --git a/kibana/templates/serviceaccount.yaml b/kibana/templates/serviceaccount.yaml
+new file mode 100644
+index 0000000..c40b687
+--- /dev/null
++++ b/kibana/templates/serviceaccount.yaml
+@@ -0,0 +1,11 @@
++{{- if .Values.managedServiceAccount -}}
++apiVersion: v1
++kind: ServiceAccount
++metadata:
++  name: {{ template "serviceAccountName" . }}
++  labels:
++    app: {{ template "kibana.name" . }}
++    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
++    heritage: {{ .Release.Service }}
++    release: {{ .Release.Name }}
++{{- end -}}
+diff --git a/logstash/templates/_helpers.tpl b/logstash/templates/_helpers.tpl
+index 162a3ee..a0a0321 100755
+--- a/logstash/templates/_helpers.tpl
++++ b/logstash/templates/_helpers.tpl
+@@ -9,15 +9,20 @@ Expand the name of the chart.
+ {{/*
+ Create a default fully qualified app name.
+ We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
++If release name contains chart name it will be used as a full name.
+ */}}
+ {{- define "logstash.fullname" -}}
+ {{- if .Values.fullnameOverride -}}
+ {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+ {{- else -}}
+ {{- $name := default .Chart.Name .Values.nameOverride -}}
++{{- if contains $name .Release.Name -}}
++{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
++{{- else -}}
+ {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+ {{- end -}}
+ {{- end -}}
++{{- end -}}
+ 
+ {{/*
+ Return the appropriate apiVersion for statefulset.
+diff --git a/logstash/templates/configmap-config.yaml b/logstash/templates/configmap-config.yaml
+index e69d524..e9e7a5b 100644
+--- a/logstash/templates/configmap-config.yaml
++++ b/logstash/templates/configmap-config.yaml
+@@ -12,6 +12,10 @@ metadata:
+ data:
+ {{- range $path, $config := .Values.logstashConfig }}
+   {{ $path }}: |
++{{- if eq $path "logstash.yml" }}
++{{ toYaml $config | indent 4 -}}
++{{- else }}
+ {{ $config | indent 4 -}}
+ {{- end -}}
+ {{- end -}}
++{{- end -}}
+diff --git a/logstash/templates/statefulset.yaml b/logstash/templates/statefulset.yaml
+index f953ec8..09ddfd0 100644
+--- a/logstash/templates/statefulset.yaml
++++ b/logstash/templates/statefulset.yaml
+@@ -51,11 +51,11 @@ spec:
+         {{- end }}
+         {{/* This forces a restart if the configmap has changed */}}
+         {{- if .Values.logstashConfig }}
+-        configchecksum: {{ include (print .Template.BasePath "/configmap-config.yaml") . | sha256sum | trunc 63 }}
++        configchecksum: {{ toYaml .Values.logstashConfig | sha256sum | trunc 63 }}
+         {{- end }}
+         {{/* This forces a restart if the configmap has changed */}}
+         {{- if .Values.logstashPipeline }}
+-        pipelinechecksum: {{ include (print .Template.BasePath "/configmap-pipeline.yaml") . | sha256sum | trunc 63 }}
++        pipelinechecksum: {{ toYaml .Values.logstashPipeline | sha256sum | trunc 63 }}
+         {{- end }}
+     spec:
+       {{- if .Values.schedulerName }}
+@@ -135,7 +135,34 @@ spec:
+       {{- end }}
+       {{- if .Values.extraInitContainers }}
+       initContainers:
+-{{ tpl .Values.extraInitContainers . | indent 6 }}
++{{- range $name, $config := .Values.extraInitContainers }}
++      - name: {{ $name }}
++{{- if $config.image }}
++        image: "{{ $config.image.repository }}:{{ $config.image.tag }}"
++        imagePullPolicy: {{ $config.image.pullPolicy }}
++{{- else }}
++        image: "{{ $.Values.image }}:{{ $.Values.imageTag }}"
++        imagePullPolicy: {{ $.Values.imagePullPolicy }}
++{{- end }}
++{{ toYaml $config.container | indent 8 }}
++        env:
++          ## Elasticsearch output
++          - name: ELASTICSEARCH_HOST
++            value: {{ $.Values.elasticsearchHosts | quote }}
++          ## make system name visible for in setting index.
++          {{- if $.Values.systemNameForIndex}}
++          {{  $systemNameNoSpecial := regexReplaceAll "[^A-Za-z0-9-]+" $.Values.systemNameForIndex "" }}
++          {{  $systemNameFormatted := $systemNameNoSpecial | lower | trunc 200 }}
++          - name: SYSTEM_NAME_FOR_INDEX
++            value: {{ printf "-%s" $systemNameFormatted | quote }}
++          {{- else }}
++          - name: SYSTEM_NAME_FOR_INDEX
++            value: ""
++          {{- end }}
++{{- if $.Values.extraEnvs }}
++{{ toYaml $.Values.extraEnvs | indent 10 }}
++{{- end }}
++{{- end }}
+       {{- end }}
+       containers:
+       - name: "{{ template "logstash.name" . }}"
+@@ -150,9 +177,25 @@ spec:
+         ports:
+         - name: http
+           containerPort: {{ .Values.httpPort }}
++{{- if .Values.ports }}
++{{ toYaml .Values.ports | indent 8 }}
++{{- end }}
+         resources:
+ {{ toYaml .Values.resources | indent 10 }}
+         env:
++          ## Elasticsearch output
++          - name: ELASTICSEARCH_HOST
++            value: {{ .Values.elasticsearchHosts | quote }}
++          ## make system name visible for in setting index.
++          {{- if .Values.systemNameForIndex}}
++          {{  $systemNameNoSpecial := regexReplaceAll "[^A-Za-z0-9-]+" .Values.systemNameForIndex "" }}
++          {{  $systemNameFormatted := $systemNameNoSpecial | lower | trunc 200 }}
++          - name: SYSTEM_NAME_FOR_INDEX
++            value: {{ printf "-%s" $systemNameFormatted | quote }}
++          {{- else }}
++          - name: SYSTEM_NAME_FOR_INDEX
++            value: ""
++          {{- end }}
+           - name: LS_JAVA_OPTS
+             value: "{{ .Values.logstashJavaOpts }}"
+ {{- if .Values.extraEnvs }}
+diff --git a/logstash/values.yaml b/logstash/values.yaml
+index 498136a..990287b 100755
+--- a/logstash/values.yaml
++++ b/logstash/values.yaml
+@@ -4,7 +4,7 @@ replicas: 1
+ # Allows you to add any config files in /usr/share/logstash/config/
+ # such as logstash.yml and log4j2.properties
+ logstashConfig: {}
+-#  logstash.yml: |
++#  logstash.yml:
+ #    key:
+ #      nestedkey: value
+ #  log4j2.properties: |
+@@ -97,10 +97,14 @@ extraContainers: ""
+   #   image: busybox
+   #   command: ['do', 'something']
+ 
+-extraInitContainers: ""
+-  # - name: do-something
+-  #   image: busybox
+-  #   command: ['do', 'something']
++extraInitContainers: []
++  # "do-something":
++  #   image:
++  #     repository: busybox
++  #     tag: latest
++  #     pullPolicy: IfNotPresent
++  #   container:
++  #     command: ['do', 'something']
+ 
+ # This is the PriorityClass settings as defined in
+ # https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass
+@@ -185,6 +189,11 @@ lifecycle: {}
+   #   exec:
+   #     command: ["/bin/sh", "-c", "echo Hello from the postStart handler > /usr/share/message"]
+ 
++# Will be used in index names
++systemNameForIndex: ""
++
++ports: []
++
+ service: {}
+ #  annotations: {}
+ #  type: ClusterIP
+diff --git a/metricbeat/requirements.yaml b/metricbeat/requirements.yaml
+index 0f8c03d..7ee66b5 100644
+--- a/metricbeat/requirements.yaml
++++ b/metricbeat/requirements.yaml
+@@ -1,4 +1,4 @@
+-dependencies:
+-  - name: 'kube-state-metrics'
+-    version: '2.4.1'
+-    repository: '@stable'
++dependencies: []
++  # - name: 'kube-state-metrics'
++  #   version: '2.4.1'
++  #   repository: '@stable'
+diff --git a/metricbeat/templates/_helpers.tpl b/metricbeat/templates/_helpers.tpl
+index 35f776c..38e2cc7 100755
+--- a/metricbeat/templates/_helpers.tpl
++++ b/metricbeat/templates/_helpers.tpl
+@@ -9,15 +9,20 @@ Expand the name of the chart.
+ {{/*
+ Create a default fully qualified app name.
+ We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
++If release name contains chart name it will be used as a full name.
+ */}}
+ {{- define "metricbeat.fullname" -}}
+ {{- if .Values.fullnameOverride -}}
+ {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+ {{- else -}}
+ {{- $name := default .Chart.Name .Values.nameOverride -}}
++{{- if contains $name .Release.Name -}}
++{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
++{{- else -}}
+ {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+ {{- end -}}
+ {{- end -}}
++{{- end -}}
+ 
+ {{/*
+ Use the fullname if the serviceAccount value is not set
+@@ -27,6 +32,10 @@ Use the fullname if the serviceAccount value is not set
+ {{- .Values.serviceAccount -}}
+ {{- else }}
+ {{- $name := default .Chart.Name .Values.nameOverride -}}
++{{- if contains $name .Release.Name -}}
++{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
++{{- else -}}
+ {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+ {{- end -}}
+ {{- end -}}
++{{- end -}}
+diff --git a/metricbeat/templates/configmap.yaml b/metricbeat/templates/configmap.yaml
+index 09e381c..56af441 100644
+--- a/metricbeat/templates/configmap.yaml
++++ b/metricbeat/templates/configmap.yaml
+@@ -12,6 +12,10 @@ metadata:
+ data:
+ {{- range $path, $config := .Values.metricbeatConfig }}
+   {{ $path }}: |
++{{- if or (eq $path "metricbeat.yml") (eq $path "kube-state-metrics-metricbeat.yml") }}
++{{ toYaml $config | indent 4 -}}
++{{- else }}
+ {{ $config | indent 4 -}}
+ {{- end -}}
+ {{- end -}}
++{{- end -}}
+diff --git a/metricbeat/templates/daemonset.yaml b/metricbeat/templates/daemonset.yaml
+index 392b7cf..db02a29 100644
+--- a/metricbeat/templates/daemonset.yaml
++++ b/metricbeat/templates/daemonset.yaml
+@@ -26,7 +26,7 @@ spec:
+         {{- end }}
+         {{/* This forces a restart if the configmap has changed */}}
+         {{- if .Values.metricbeatConfig }}
+-        configChecksum: {{ include (print .Template.BasePath "/configmap.yaml") . | sha256sum | trunc 63 }}
++        configchecksum: {{ toYaml .Values.metricbeatConfig | sha256sum | trunc 63 }}
+         {{- end }}
+       name: "{{ template "metricbeat.fullname" . }}"
+       labels:
+@@ -52,6 +52,8 @@ spec:
+       {{- end }}
+       serviceAccountName: {{ template "metricbeat.serviceAccount" . }}
+       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriod }}
++      hostNetwork: true
++      dnsPolicy: ClusterFirstWithHostNet
+       volumes:
+       {{- range .Values.secretMounts }}
+       - name: {{ .name }}
+@@ -89,7 +91,61 @@ spec:
+       {{- end }}
+       {{- if .Values.extraInitContainers }}
+       initContainers:
+-{{ tpl .Values.extraInitContainers . | indent 6 }}
++{{- range $name, $config := .Values.extraInitContainers }}
++      - name: {{ $name }}
++{{- if $config.image }}
++        image: "{{ $config.image.repository }}:{{ $config.image.tag }}"
++        imagePullPolicy: {{ $config.image.pullPolicy }}
++{{- else }}
++        image: "{{ $.Values.image }}:{{ $.Values.imageTag }}"
++        imagePullPolicy: {{ $.Values.imagePullPolicy }}
++{{- end }}
++{{ toYaml $config.container | indent 8 }}
++        env:
++          - name: POD_NAMESPACE
++            valueFrom:
++              fieldRef:
++                fieldPath: metadata.namespace
++          - name: NODE_NAME
++            valueFrom:
++              fieldRef:
++                fieldPath: spec.nodeName
++        ## make output.elasticsearch parms visible
++        {{- range $path, $config := $.Values.metricbeatConfig}}
++        {{- if eq $path "metricbeat.yml" -}}
++        {{- range $key, $value := $config}}
++        {{- $configname := $key | upper | replace "." "_" }}
++        {{- if eq $configname "OUTPUT_ELASTICSEARCH" -}}
++        {{- range $key2, $value2 := $value}}
++          - name: "{{ $configname }}_{{ $key2 | upper }}"
++            value: {{ $value2 | quote }}
++        {{- end }}
++        {{- end }}
++        {{- end }}
++        {{- end }}
++        {{- end }}
++        ## make system name and index parms visible
++        {{- if $.Values.systemNameForIndex}}
++        {{  $systemNameNoSpecial := regexReplaceAll "[^A-Za-z0-9-]+" $.Values.systemNameForIndex "" }}
++        {{  $systemNameFormatted := $systemNameNoSpecial | lower | trunc 200 }}
++          - name: SYSTEM_NAME_FOR_INDEX
++            value: {{ printf "-%s" $systemNameFormatted | quote }}
++          - name: INDEX_PATTERN
++            value: "{{ $.Values.indexNamePrefix }}-{{$systemNameFormatted}}-*"
++          - name: INDEX_NAME
++            value: "{{ $.Values.indexNamePrefix }}-{{$systemNameFormatted}}"
++        {{- else }}
++          - name: SYSTEM_NAME_FOR_INDEX
++            value: "unset"
++          - name: INDEX_PATTERN
++            value: "{{ $.Values.indexNamePrefix }}-*"
++          - name: INDEX_NAME
++            value: "{{ $.Values.indexNamePrefix }}"
++        {{- end }}
++{{- if $.Values.extraEnvs }}
++{{ toYaml $.Values.extraEnvs | indent 10 }}
++{{- end }}
++{{- end }}
+       {{- end }}
+       containers:
+       - name: "metricbeat"
+@@ -115,6 +171,38 @@ spec:
+           valueFrom:
+             fieldRef:
+               fieldPath: spec.nodeName
++      ## make output.elasticsearch parms visible
++      {{- range $path, $config := .Values.metricbeatConfig}}
++      {{- if eq $path "metricbeat.yml" -}}
++      {{- range $key, $value := $config}}
++      {{- $configname := $key | upper | replace "." "_" }}
++      {{- if eq $configname "OUTPUT_ELASTICSEARCH" -}}
++      {{- range $key2, $value2 := $value}}
++        - name: "{{ $configname }}_{{ $key2 | upper }}"
++          value: {{ $value2 | quote }}
++      {{- end }}
++      {{- end }}
++      {{- end }}
++      {{- end }}
++      {{- end }}
++      ## make system name and index parms visible
++      {{- if .Values.systemNameForIndex}}
++      {{  $systemNameNoSpecial := regexReplaceAll "[^A-Za-z0-9-]+" .Values.systemNameForIndex "" }}
++      {{  $systemNameFormatted := $systemNameNoSpecial | lower | trunc 200 }}
++        - name: SYSTEM_NAME_FOR_INDEX
++          value: {{ printf "-%s" $systemNameFormatted | quote }}
++        - name: INDEX_PATTERN
++          value: "{{ .Values.indexNamePrefix }}-{{$systemNameFormatted}}-*"
++        - name: INDEX_NAME
++          value: "{{ .Values.indexNamePrefix }}-{{$systemNameFormatted}}"
++      {{- else }}
++        - name: SYSTEM_NAME_FOR_INDEX
++          value: "unset"
++        - name: INDEX_PATTERN
++          value: "{{ .Values.indexNamePrefix }}-*"
++        - name: INDEX_NAME
++          value: "{{ .Values.indexNamePrefix }}"
++      {{- end }}
+ {{- if .Values.extraEnvs }}
+ {{ toYaml .Values.extraEnvs | indent 8 }}
+ {{- end }}
+diff --git a/metricbeat/templates/deployment.yaml b/metricbeat/templates/deployment.yaml
+index 225160b..2585651 100644
+--- a/metricbeat/templates/deployment.yaml
++++ b/metricbeat/templates/deployment.yaml
+@@ -24,7 +24,7 @@ spec:
+         {{- end }}
+         {{/* This forces a restart if the configmap has changed */}}
+         {{- if .Values.metricbeatConfig }}
+-        configChecksum: {{ include (print .Template.BasePath "/configmap.yaml") . | sha256sum | trunc 63 }}
++        configchecksum: {{ toYaml .Values.metricbeatConfig | sha256sum | trunc 63 }}
+         {{- end }}
+       labels:
+         app: '{{ template "metricbeat.fullname" . }}-metrics'
+@@ -62,7 +62,63 @@ spec:
+       {{- end }}
+       {{- if .Values.extraInitContainers }}
+       initContainers:
+-{{ tpl .Values.extraInitContainers . | indent 6 }}
++{{- range $name, $config := .Values.extraInitContainers }}
++      - name: {{ $name }}
++{{- if $config.image }}
++        image: "{{ $config.image.repository }}:{{ $config.image.tag }}"
++        imagePullPolicy: {{ $config.image.pullPolicy }}
++{{- else }}
++        image: "{{ $.Values.image }}:{{ $.Values.imageTag }}"
++        imagePullPolicy: {{ $.Values.imagePullPolicy }}
++{{- end }}
++{{ toYaml $config.container | indent 8 }}
++        env:
++          - name: POD_NAMESPACE
++            valueFrom:
++              fieldRef:
++                fieldPath: metadata.namespace
++          - name: KUBE_STATE_METRICS_HOSTS
++            value: "$({{ $.Release.Name | replace "-" "_" | upper }}_KUBE_STATE_METRICS_SERVICE_HOST):$({{ $.Release.Name | replace "-" "_" | upper }}_KUBE_STATE_METRICS_SERVICE_PORT_HTTP)"
++          - name: NODE_NAME
++            valueFrom:
++              fieldRef:
++                fieldPath: spec.nodeName
++        ## make output.elasticsearch parms visible
++        {{- range $path, $config := $.Values.metricbeatConfig}}
++        {{- if eq $path "metricbeat.yml" -}}
++        {{- range $key, $value := $config}}
++        {{- $configname := $key | upper | replace "." "_" }}
++        {{- if eq $configname "OUTPUT_ELASTICSEARCH" -}}
++        {{- range $key2, $value2 := $value}}
++          - name: "{{ $configname }}_{{ $key2 | upper }}"
++            value: {{ $value2 | quote }}
++        {{- end }}
++        {{- end }}
++        {{- end }}
++        {{- end }}
++        {{- end }}
++        ## make system name and index parms visible
++        {{- if $.Values.systemNameForIndex}}
++        {{  $systemNameNoSpecial := regexReplaceAll "[^A-Za-z0-9-]+" $.Values.systemNameForIndex "" }}
++        {{  $systemNameFormatted := $systemNameNoSpecial | lower | trunc 200 }}
++          - name: SYSTEM_NAME_FOR_INDEX
++            value: {{ printf "-%s" $systemNameFormatted | quote }}
++          - name: INDEX_PATTERN
++            value: "{{ $.Values.indexNamePrefix }}-{{$systemNameFormatted}}-*"
++          - name: INDEX_NAME
++            value: "{{ $.Values.indexNamePrefix }}-{{$systemNameFormatted}}"
++        {{- else }}
++          - name: SYSTEM_NAME_FOR_INDEX
++            value: "unset"
++          - name: INDEX_PATTERN
++            value: "{{ $.Values.indexNamePrefix }}-*"
++          - name: INDEX_NAME
++            value: "{{ $.Values.indexNamePrefix }}"
++        {{- end }}
++{{- if $.Values.extraEnvs }}
++{{ toYaml $.Values.extraEnvs | indent 10 }}
++{{- end }}
++{{- end }}
+       {{- end }}
+       containers:
+       - name: "metricbeat"
+@@ -87,6 +143,42 @@ spec:
+               fieldPath: metadata.namespace
+         - name: KUBE_STATE_METRICS_HOSTS
+           value: "$({{ .Release.Name | replace "-" "_" | upper }}_KUBE_STATE_METRICS_SERVICE_HOST):$({{ .Release.Name | replace "-" "_" | upper }}_KUBE_STATE_METRICS_SERVICE_PORT_HTTP)"
++        - name: NODE_NAME
++          valueFrom:
++            fieldRef:
++              fieldPath: spec.nodeName
++      ## make output.elasticsearch parms visible
++      {{- range $path, $config := .Values.metricbeatConfig}}
++      {{- if eq $path "metricbeat.yml" -}}
++      {{- range $key, $value := $config}}
++      {{- $configname := $key | upper | replace "." "_" }}
++      {{- if eq $configname "OUTPUT_ELASTICSEARCH" -}}
++      {{- range $key2, $value2 := $value}}
++        - name: "{{ $configname }}_{{ $key2 | upper }}"
++          value: {{ $value2 | quote }}
++      {{- end }}
++      {{- end }}
++      {{- end }}
++      {{- end }}
++      {{- end }}
++      ## make system name and index parms visible
++      {{- if .Values.systemNameForIndex}}
++      {{  $systemNameNoSpecial := regexReplaceAll "[^A-Za-z0-9-]+" .Values.systemNameForIndex "" }}
++      {{  $systemNameFormatted := $systemNameNoSpecial | lower | trunc 200 }}
++        - name: SYSTEM_NAME_FOR_INDEX
++          value: {{ printf "-%s" $systemNameFormatted | quote }}
++        - name: INDEX_PATTERN
++          value: "{{ .Values.indexNamePrefix }}-{{$systemNameFormatted}}-*"
++        - name: INDEX_NAME
++          value: "{{ .Values.indexNamePrefix }}-{{$systemNameFormatted}}"
++      {{- else }}
++        - name: SYSTEM_NAME_FOR_INDEX
++          value: "unset"
++        - name: INDEX_PATTERN
++          value: "{{ .Values.indexNamePrefix }}-*"
++        - name: INDEX_NAME
++          value: "{{ .Values.indexNamePrefix }}"
++      {{- end }}
+ {{- if .Values.extraEnvs }}
+ {{ toYaml .Values.extraEnvs | indent 8 }}
+ {{- end }}
+diff --git a/metricbeat/templates/serviceaccount.yaml b/metricbeat/templates/serviceaccount.yaml
+index 2330646..49d6782 100644
+--- a/metricbeat/templates/serviceaccount.yaml
++++ b/metricbeat/templates/serviceaccount.yaml
+@@ -8,4 +8,6 @@ metadata:
+     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+     heritage: {{ .Release.Service | quote }}
+     release: {{ .Release.Name | quote }}
++imagePullSecrets:
++  - name: default-registry-key
+ {{- end -}}
+diff --git a/metricbeat/values.yaml b/metricbeat/values.yaml
+index 3ea4af3..78ad798 100755
+--- a/metricbeat/values.yaml
++++ b/metricbeat/values.yaml
+@@ -2,7 +2,7 @@
+ # Allows you to add any config files in /usr/share/metricbeat
+ # such as metricbeat.yml
+ metricbeatConfig:
+-  metricbeat.yml: |
++  metricbeat.yml:
+     metricbeat.modules:
+     - module: kubernetes
+       metricsets:
+@@ -45,7 +45,7 @@ metricbeatConfig:
+     output.elasticsearch:
+       hosts: '${ELASTICSEARCH_HOSTS:elasticsearch-master:9200}'
+ 
+-  kube-state-metrics-metricbeat.yml: |
++  kube-state-metrics-metricbeat.yml:
+     metricbeat.modules:
+     - module: kubernetes
+       enabled: true
+@@ -64,15 +64,23 @@ metricbeatConfig:
+ 
+ replicas: 1
+ 
++# Will be used in index name
++systemNameForIndex: ""
++indexNamePrefix: metricbeat-%{[agent.version]}
++
+ extraContainers: ""
+ # - name: dummy-init
+ #   image: busybox
+ #   command: ['echo', 'hey']
+ 
+-extraInitContainers: ""
+-# - name: dummy-init
+-#   image: busybox
+-#   command: ['echo', 'hey']
++extraInitContainers: []
++  # "dummy-init":
++  #   image:
++  #     repository: busybox
++  #     tag: latest
++  #     pullPolicy: IfNotPresent
++  #   container:
++  #     command: ['echo', 'hey']
+ 
+ # Extra environment variables to append to the DaemonSet pod spec.
+ # This will be appended to the current 'env:' key. You can use any of the kubernetes env
+-- 
+2.20.1
+

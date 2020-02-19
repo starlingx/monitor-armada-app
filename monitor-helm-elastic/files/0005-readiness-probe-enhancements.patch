@@ -12,7 +12,7 @@ diff --git a/elasticsearch/templates/statefulset.yaml b/elasticsearch/templates/
 index e17d39e..483e1f4 100644
 --- a/elasticsearch/templates/statefulset.yaml
 +++ b/elasticsearch/templates/statefulset.yaml
-@@ -194,7 +194,7 @@ spec:
+@@ -202,7 +202,7 @@ spec:
                  # If the node is starting up wait for the cluster to be ready (request params: '{{ .Values.clusterHealthCheckParams }}' )
                  # Once it has started only check that the node itself is responding
                  START_FILE=/tmp/.es_start_file
@@ -21,11 +21,11 @@ index e17d39e..483e1f4 100644
                  http () {
                      local path="${1}"
                      if [ -n "${ELASTIC_USERNAME}" ] && [ -n "${ELASTIC_PASSWORD}" ]; then
-@@ -209,13 +209,45 @@ spec:
-                     echo 'Elasticsearch is already running, lets check the node is healthy'
-                     http "/"
+@@ -217,13 +217,45 @@ spec:
+                     echo 'Elasticsearch is already running, lets check the node is healthy and there are master nodes available'
+                     http "/_cluster/health?timeout=0s"
                  else
--                    echo 'Waiting for elasticsearch cluster to become cluster to be ready (request params: "{{ .Values.clusterHealthCheckParams }}" )'
+-                    echo 'Waiting for elasticsearch cluster to become ready (request params: "{{ .Values.clusterHealthCheckParams }}" )'
 -                    if http "/_cluster/health?{{ .Values.clusterHealthCheckParams }}" ; then
 -                        touch ${START_FILE}
 -                        exit 0
@@ -77,7 +77,7 @@ diff --git a/elasticsearch/values.yaml b/elasticsearch/values.yaml
 index 0d983eb..ebbae6c 100755
 --- a/elasticsearch/values.yaml
 +++ b/elasticsearch/values.yaml
-@@ -197,6 +197,8 @@ readinessProbe:
+@@ -204,6 +204,8 @@ readinessProbe:
  
  # https://www.elastic.co/guide/en/elasticsearch/reference/current/cluster-health.html#request-params wait_for_status
  clusterHealthCheckParams: "wait_for_status=green&timeout=1s"

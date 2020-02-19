@@ -4,16 +4,15 @@ Date: Tue, 1 Oct 2019 15:25:32 -0400
 Subject: [PATCH 1/1] add makefile
 
 ---
- Makefile | 43 +++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 43 insertions(+)
- create mode 100644 Makefile
+ Makefile | 44 +++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 43 insertions(+), 1 deletions(-)
 
 diff --git a/Makefile b/Makefile
-new file mode 100644
-index 0000000..5cf4447
---- /dev/null
+index 00e154d..5cf4447
+--- a/Makefile
 +++ b/Makefile
-@@ -0,0 +1,43 @@
+@@ -1,1 +1,43 @@
+-include helpers/common.mk
 +#
 +# Copyright 2017 The Openstack-Helm Authors.
 +#

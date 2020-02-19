@@ -1,5 +1,9 @@
 This repo is for
 https://github.com/elastic/helm-charts/tree/master/elasticsearch
+https://github.com/elastic/helm-charts/tree/master/filebeat
+https://github.com/elastic/helm-charts/tree/master/kibana
+https://github.com/elastic/helm-charts/tree/master/logstash
+https://github.com/elastic/helm-charts/tree/master/metricbeat
 
 Changes to this repo are needed for StarlingX and those changes are
 not yet merged.

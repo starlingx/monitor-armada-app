@@ -1,5 +1,5 @@
 TAR_NAME=helm-charts-elastic
-SHA=2bd7616ceddbdf2eee88965e2028ee37d304c79c
+SHA=945017287598479ba8653d9baf3ff26f7fe31e50
 VERSION=1.0.0
 TAR="$TAR_NAME-$SHA.tar.gz"
 

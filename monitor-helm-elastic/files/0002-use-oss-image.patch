@@ -17,7 +17,7 @@ index ccab462..f4fca1f 100755
  
 -image: "docker.elastic.co/elasticsearch/elasticsearch"
 +image: "docker.elastic.co/elasticsearch/elasticsearch-oss"
- imageTag: "7.3.2"
+ imageTag: "7.6.0"
  imagePullPolicy: "IfNotPresent"
  
 -- 

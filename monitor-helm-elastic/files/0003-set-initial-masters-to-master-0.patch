@@ -12,11 +12,11 @@ diff --git a/elasticsearch/templates/statefulset.yaml b/elasticsearch/templates/
 index 36c7af6..e17d39e 100644
 --- a/elasticsearch/templates/statefulset.yaml
 +++ b/elasticsearch/templates/statefulset.yaml
-@@ -233,7 +233,7 @@ spec:
+@@ -241,7 +241,7 @@ spec:
            {{- if eq .Values.roles.master "true" }}
-           {{- if ge (int (include "esMajorVersion" .)) 7 }}
+           {{- if ge (int (include "elasticsearch.esMajorVersion" .)) 7 }}
            - name: cluster.initial_master_nodes
--            value: "{{ template "endpoints" . }}"
+-            value: "{{ template "elasticsearch.endpoints" . }}"
 +            value: "{{ .Values.initialMasterNodes }}"
            {{- else }}
            - name: discovery.zen.minimum_master_nodes
