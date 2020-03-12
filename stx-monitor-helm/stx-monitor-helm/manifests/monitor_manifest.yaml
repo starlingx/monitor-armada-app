@@ -563,6 +563,7 @@ data:
       - name: root
         mountPath: /hostfs
         readOnly: true
+        mountPropagation: HostToContainer
     extraVolumes:
       - name: root
         hostPath:
