@@ -106,7 +106,7 @@ data:
     esMajorVersion: 7
     masterService: 'mon-elasticsearch-data-headless, mon-elasticsearch-master'
     podManagementPolicy: OrderedReady
-    clusterHealthCheckParams: 'local=true'
+    clusterHealthCheckParams: 'wait_for_no_relocating_shards&wait_for_no_initializing_shards&timeout=1s'
     maxUnavailable: 1
     extraEnvs:
       - name: DATA_PRESTOP_SLEEP

@@ -23,6 +23,7 @@ Patch02: 0002-Add-compatibility-for-k8s-1.16.patch
 Patch03: 0003-use-oss-image.patch
 Patch04: 0004-Update-to-Elastic-7.4.0-Release.patch
 Patch05: 0005-set-initial-masters-to-master-0.patch
+Patch06: 0006-readiness-probe-enhancements.patch
 
 BuildRequires: helm
 
@@ -36,6 +37,7 @@ Monitor Helm elasticsearch charts
 %patch03 -p1
 %patch04 -p1
 %patch05 -p1
+%patch06 -p1
 
 %build
 # initialize helm and build the toolkit
