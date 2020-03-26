@@ -1,0 +1,44 @@
+From 1e1ee29b195958f0c3313af86b6dae8f04720277 Mon Sep 17 00:00:00 2001
+From: Kevin Smith <kevin.smith@windriver.com>
+Date: Thu, 26 Mar 2020 15:01:07 -0400
+Subject: [PATCH 1/1] use main container image for initcontainer
+
+---
+ stable/logstash/templates/statefulset.yaml | 4 ++++
+ stable/logstash/values.yaml                | 5 +++++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/stable/logstash/templates/statefulset.yaml b/stable/logstash/templates/statefulset.yaml
+index d34dcec..66f6313 100644
+--- a/stable/logstash/templates/statefulset.yaml
++++ b/stable/logstash/templates/statefulset.yaml
+@@ -48,6 +48,10 @@ spec:
+       initContainers:
+ {{- if .Values.extraInitContainers }}
+ {{ toYaml .Values.extraInitContainers | indent 8 }}
++{{- if .Values.useMainImageForInitContainers }}
++          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
++          imagePullPolicy: {{ .Values.image.pullPolicy }}
++{{- end }}
+           env:
+             ## Elasticsearch output
+             - name: ELASTICSEARCH_HOST
+diff --git a/stable/logstash/values.yaml b/stable/logstash/values.yaml
+index 2fdebde..2167601 100644
+--- a/stable/logstash/values.yaml
++++ b/stable/logstash/values.yaml
+@@ -169,6 +169,11 @@ volumes: []
+ 
+ extraEnv: []
+ 
++# Init container will use the same image as the main
++# container if this is true.  If true, do not specify
++# the image in the extraInitContainers block.  If false,
++# will need to specify the image.
++useMainImageForInitContainers: true
+ extraInitContainers: []
+   # - name: echo
+   #   image: busybox
+-- 
+1.8.3.1
+

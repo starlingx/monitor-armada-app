@@ -33,6 +33,7 @@ Patch12: 0012-Add-imagePullSecrets.patch
 Patch13: 0013-removed-unused-images.patch
 Patch14: 0014-Add-rbac-replicasets-to-apps-apigroup-commit-1717e2d.patch
 Patch15: 0015-script-flexibility.patch
+Patch16: 0016-use-main-container-image-for-initcontainer.patch
 
 BuildRequires: helm
 
@@ -56,6 +57,7 @@ Monitor Helm charts
 %patch13 -p1
 %patch14 -p1
 %patch15 -p1
+%patch16 -p1
 
 %build
 # initialize helm and build the toolkit
