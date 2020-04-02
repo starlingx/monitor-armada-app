@@ -421,6 +421,7 @@ data:
   values:
     filebeatConfig:
       filebeat.yml:
+        http.port: 5066
         filebeat.inputs:
         - type: log
           enabled: true
@@ -608,6 +609,7 @@ data:
   values:
     metricbeatConfig:
       metricbeat.yml:
+        http.port: 5066
         output.file:
           enabled: false
         output.logstash:
@@ -636,6 +638,7 @@ data:
               host: ${NODE_NAME}
               hints.enabled: true
       kube-state-metrics-metricbeat.yml:
+        http.port: 5066
         output.file:
           enabled: false
         output.logstash:

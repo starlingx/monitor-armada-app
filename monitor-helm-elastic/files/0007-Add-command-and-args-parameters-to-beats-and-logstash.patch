@@ -1,0 +1,152 @@
+From cb973a12ae6bd542cf25881afb56155f7c397d3c Mon Sep 17 00:00:00 2001
+From: Simon Cousineau <Simon.Cousineau@windriver.com>
+Date: Wed, 8 Apr 2020 11:03:14 -0400
+Subject: [PATCH 1/1] Add command and args parameters to beats and logstash
+
+---
+ filebeat/templates/daemonset.yaml    |  8 ++++++++
+ filebeat/values.yaml                 |  6 ++++++
+ logstash/templates/statefulset.yaml  |  8 ++++++++
+ logstash/values.yaml                 |  6 ++++++
+ metricbeat/templates/daemonset.yaml  |  8 ++++++++
+ metricbeat/templates/deployment.yaml |  8 ++++++++
+ metricbeat/values.yaml               | 10 ++++++++++
+ 7 files changed, 54 insertions(+)
+
+diff --git a/filebeat/templates/daemonset.yaml b/filebeat/templates/daemonset.yaml
+index 6e8be91..e0b67ba 100644
+--- a/filebeat/templates/daemonset.yaml
++++ b/filebeat/templates/daemonset.yaml
+@@ -148,9 +148,17 @@ spec:
+         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+         imagePullPolicy: "{{ .Values.imagePullPolicy }}"
+         args:
++{{- if .Values.args }}
++{{ toYaml .Values.args | indent 8 }}
++{{- else }}
+         - "-e"
+         - "-E"
+         - "http.enabled=true"
++{{- end }}
++{{- if .Values.command }}
++        command:
++{{ toYaml .Values.command | indent 8 }}
++{{- end }}
+         livenessProbe:
+ {{ toYaml .Values.livenessProbe | indent 10 }}
+         readinessProbe:
+diff --git a/filebeat/values.yaml b/filebeat/values.yaml
+index f83a19f..015e6fd 100755
+--- a/filebeat/values.yaml
++++ b/filebeat/values.yaml
+@@ -140,3 +140,9 @@ fullnameOverride: ""
+ # Will be used in index name
+ systemNameForIndex: ""
+ indexNamePrefix: filebeat-%{[agent.version]}
++
++# pass custom command. This is equivalent of Entrypoint in docker
++command: []
++
++# pass custom args. This is equivalent of Cmd in docker
++args: []
+diff --git a/logstash/templates/statefulset.yaml b/logstash/templates/statefulset.yaml
+index 09ddfd0..e162023 100644
+--- a/logstash/templates/statefulset.yaml
++++ b/logstash/templates/statefulset.yaml
+@@ -170,6 +170,14 @@ spec:
+ {{ toYaml .Values.securityContext | indent 10 }}
+         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+         imagePullPolicy: "{{ .Values.imagePullPolicy }}"
++{{- if .Values.args }}
++        args:
++{{ toYaml .Values.args | indent 8 }}
++{{- end }}
++{{- if .Values.command }}
++        command:
++{{ toYaml .Values.command | indent 8 }}
++{{- end }}
+         livenessProbe:
+ {{ toYaml .Values.livenessProbe | indent 10 }}
+         readinessProbe:
+diff --git a/logstash/values.yaml b/logstash/values.yaml
+index 990287b..9fedf40 100755
+--- a/logstash/values.yaml
++++ b/logstash/values.yaml
+@@ -206,3 +206,9 @@ service: {}
+ #      port: 8080
+ #      protocol: TCP
+ #      targetPort: 8080
++
++# pass custom command. This is equivalent of Entrypoint in docker
++command: []
++
++# pass custom args. This is equivalent of Cmd in docker
++args: []
+diff --git a/metricbeat/templates/daemonset.yaml b/metricbeat/templates/daemonset.yaml
+index db02a29..f2beba9 100644
+--- a/metricbeat/templates/daemonset.yaml
++++ b/metricbeat/templates/daemonset.yaml
+@@ -152,10 +152,18 @@ spec:
+         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+         imagePullPolicy: "{{ .Values.imagePullPolicy }}"
+         args:
++{{- if .Values.args.daemonset }}
++{{ toYaml .Values.args.daemonset | indent 8 }}
++{{- else }}
+         - "-e"
+         - "-E"
+         - "http.enabled=true"
+         - "--system.hostfs=/hostfs"
++{{- end }}
++{{- if .Values.command.daemonset }}
++        command:
++{{ toYaml .Values.command.daemonset | indent 8 }}
++{{- end }}
+         livenessProbe:
+ {{ toYaml .Values.livenessProbe | indent 10 }}
+         readinessProbe:
+diff --git a/metricbeat/templates/deployment.yaml b/metricbeat/templates/deployment.yaml
+index 2585651..59cf07b 100644
+--- a/metricbeat/templates/deployment.yaml
++++ b/metricbeat/templates/deployment.yaml
+@@ -125,11 +125,19 @@ spec:
+         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+         imagePullPolicy: "{{ .Values.imagePullPolicy }}"
+         args:
++{{- if .Values.args.deployment }}
++{{ toYaml .Values.args.deployment | indent 8 }}
++{{- else }}
+           - "-c"
+           - "/usr/share/metricbeat/kube-state-metrics-metricbeat.yml"
+           - "-e"
+           - "-E"
+           - "http.enabled=true"
++{{- end }}
++{{- if .Values.command.deployment }}
++        command:
++{{ toYaml .Values.command.deployment | indent 8 }}
++{{- end }}
+         livenessProbe:
+ {{ toYaml .Values.livenessProbe | indent 10 }}
+         readinessProbe:
+diff --git a/metricbeat/values.yaml b/metricbeat/values.yaml
+index 78ad798..3b394a4 100755
+--- a/metricbeat/values.yaml
++++ b/metricbeat/values.yaml
+@@ -208,3 +208,13 @@ updateStrategy: RollingUpdate
+ # Only edit these if you know what you're doing
+ nameOverride: ""
+ fullnameOverride: ""
++
++# pass custom command. This is equivalent of Entrypoint in docker
++command:
++  daemonset: []
++  deployment: []
++
++# pass custom args. This is equivalent of Cmd in docker
++args:
++  daemonset: []
++  deployment: []
+-- 
+2.20.1
+
