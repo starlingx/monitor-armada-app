@@ -23,6 +23,7 @@ Patch02: 0002-use-oss-image.patch
 Patch03: 0003-set-initial-masters-to-master-0.patch
 Patch04: 0004-Update-Elastic-Apps-to-7.6.0-Releases.patch
 Patch05: 0005-readiness-probe-enhancements.patch
+Patch06: 0006-Metricbeat-nodeSelector-and-tolerations-config.patch
 
 BuildRequires: helm
 
@@ -36,6 +37,7 @@ Monitor Helm elasticsearch charts
 %patch03 -p1
 %patch04 -p1
 %patch05 -p1
+%patch06 -p1
 
 %build
 # initialize helm and build the toolkit

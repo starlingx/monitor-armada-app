@@ -799,12 +799,14 @@ data:
     - nonResourceURLs: ["/metrics"]
       verbs: ["get"]
     tolerations:
-      - key: "services"
-        operator: "Equal"
-        value: "disabled"
-        effect: "NoExecute"
+      daemonset:
+        - key: "services"
+          operator: "Equal"
+          value: "disabled"
+          effect: "NoExecute"
     nodeSelector:
-      elastic-controller: "enabled"
+      deployment:
+        elastic-controller: "enabled"
   source:
     type: tar
     location: http://172.17.0.1:8080/helm_charts/starlingx/metricbeat-7.6.0.tgz

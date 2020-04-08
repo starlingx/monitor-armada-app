@@ -1,0 +1,72 @@
+From 1d9150bc2dc050a6331db56f1b92a189032e549e Mon Sep 17 00:00:00 2001
+From: Simon Cousineau <Simon.Cousineau@windriver.com>
+Date: Wed, 8 Apr 2020 12:06:14 -0400
+Subject: [PATCH 1/1] Metricbeat nodeSelector and tolerations config
+
+Support different nodeSelector and tolerations configs for metricbeat
+daemonset and deployment.
+---
+ metricbeat/templates/daemonset.yaml  | 4 ++--
+ metricbeat/templates/deployment.yaml | 8 +++++---
+ metricbeat/values.yaml               | 8 ++++++--
+ 3 files changed, 13 insertions(+), 7 deletions(-)
+
+diff --git a/metricbeat/templates/daemonset.yaml b/metricbeat/templates/daemonset.yaml
+index db02a29..0fa38c3 100644
+--- a/metricbeat/templates/daemonset.yaml
++++ b/metricbeat/templates/daemonset.yaml
+@@ -38,10 +38,10 @@ spec:
+         {{ $key }}: {{ $value | quote }}
+         {{- end }}
+     spec:
+-      {{- with .Values.tolerations }}
++      {{- with .Values.tolerations.daemonset }}
+       tolerations: {{ toYaml . | nindent 6 }}
+       {{- end }}
+-      {{- with .Values.nodeSelector }}
++      {{- with .Values.nodeSelector.daemonset }}
+       nodeSelector: {{ toYaml . | nindent 8 }}
+       {{- end }}
+       {{- if .Values.priorityClassName }}
+diff --git a/metricbeat/templates/deployment.yaml b/metricbeat/templates/deployment.yaml
+index 2585651..392b3cd 100644
+--- a/metricbeat/templates/deployment.yaml
++++ b/metricbeat/templates/deployment.yaml
+@@ -32,9 +32,11 @@ spec:
+         heritage: '{{ .Release.Service }}'
+         release: '{{ .Release.Name }}'
+     spec:
+-      {{- with .Values.tolerations }}
+-      tolerations:
+-{{ toYaml . | indent 6 }}
++      {{- with .Values.tolerations.deployment }}
++      tolerations: {{ toYaml . | nindent 6 }}
++      {{- end }}
++      {{- with .Values.nodeSelector.deployment }}
++      nodeSelector: {{ toYaml . | nindent 8 }}
+       {{- end }}
+       {{- if .Values.priorityClassName }}
+       priorityClassName: {{ .Values.priorityClassName  }}
+diff --git a/metricbeat/values.yaml b/metricbeat/values.yaml
+index 78ad798..6d53f3e 100755
+--- a/metricbeat/values.yaml
++++ b/metricbeat/values.yaml
+@@ -192,9 +192,13 @@ secretMounts: []
+ # How long to wait for metricbeat pods to stop gracefully
+ terminationGracePeriod: 30
+ 
+-tolerations: []
++tolerations:
++  daemonset: []
++  deployment: []
+ 
+-nodeSelector: {}
++nodeSelector:
++  daemonset: {}
++  deployment: {}
+ 
+ affinity: {}
+ 
+-- 
+2.20.1
+
