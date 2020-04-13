@@ -458,6 +458,10 @@ data:
             - type: kubernetes
               host: ${NODE_NAME}
               hints.enabled: true
+              hints.default_config:
+                type: container
+                paths:
+                - /var/log/containers/*-${data.kubernetes.container.id}.log
       setup-script.sh: |
         #!/bin/bash
         #
