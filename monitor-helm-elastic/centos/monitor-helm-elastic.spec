@@ -25,6 +25,7 @@ Patch04: 0004-Update-Elastic-Apps-to-7.6.0-Releases.patch
 Patch05: 0005-readiness-probe-enhancements.patch
 Patch06: 0006-Metricbeat-nodeSelector-and-tolerations-config.patch
 Patch07: 0007-Add-command-and-args-parameters-to-beats-and-logstash.patch
+Patch08: 0008-Add-updateStrategy-parameter-to-beats-config.patch
 
 BuildRequires: helm
 
@@ -40,6 +41,7 @@ Monitor Helm elasticsearch charts
 %patch05 -p1
 %patch06 -p1
 %patch07 -p1
+%patch08 -p1
 
 %build
 # initialize helm and build the toolkit
