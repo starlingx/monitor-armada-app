@@ -27,6 +27,7 @@ Patch06: 0006-Metricbeat-nodeSelector-and-tolerations-config.patch
 Patch07: 0007-Add-command-and-args-parameters-to-beats-and-logstash.patch
 Patch08: 0008-Add-updateStrategy-parameter-to-beats-config.patch
 Patch09: 0009-Add-hostNetworking-parameter-to-logstash-config.patch
+Patch10: 0010-Fix-esConfig-checksum-annotation.patch
 
 BuildRequires: helm
 
@@ -44,6 +45,7 @@ Monitor Helm elasticsearch charts
 %patch07 -p1
 %patch08 -p1
 %patch09 -p1
+%patch10 -p1
 
 %build
 # initialize helm and build the toolkit

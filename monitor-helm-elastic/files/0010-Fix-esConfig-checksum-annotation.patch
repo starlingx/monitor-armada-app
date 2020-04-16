@@ -1,0 +1,25 @@
+From 9d463c65aa5c5f7c6c6d75ba57da5e7b5c20fd3a Mon Sep 17 00:00:00 2001
+From: Simon Cousineau <Simon.Cousineau@windriver.com>
+Date: Thu, 16 Apr 2020 13:03:46 -0400
+Subject: [PATCH 1/1] Fix esConfig checksum annotation
+
+---
+ elasticsearch/templates/statefulset.yaml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/elasticsearch/templates/statefulset.yaml b/elasticsearch/templates/statefulset.yaml
+index 16f9204..b4f6a98 100644
+--- a/elasticsearch/templates/statefulset.yaml
++++ b/elasticsearch/templates/statefulset.yaml
+@@ -50,7 +50,7 @@ spec:
+         {{- end }}
+         {{/* This forces a restart if the configmap has changed */}}
+         {{- if .Values.esConfig }}
+-        configchecksum: {{ include (print .Template.BasePath "/configmap.yaml") . | sha256sum | trunc 63 }}
++        configchecksum: {{ toYaml .Values.esConfig | sha256sum | trunc 63 }}
+         {{- end }}
+     spec:
+       {{- if .Values.schedulerName }}
+-- 
+2.20.1
+
