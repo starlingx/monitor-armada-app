@@ -1,0 +1,27 @@
+From 3b384c47dc7f106587d074fa539095f9b7179c17 Mon Sep 17 00:00:00 2001
+From: Simon Cousineau <Simon.Cousineau@windriver.com>
+Date: Mon, 20 Apr 2020 16:28:46 -0400
+Subject: [PATCH 1/1] Fix Elasticsearch readiness probe http endpoint
+
+---
+ elasticsearch/templates/statefulset.yaml | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/elasticsearch/templates/statefulset.yaml b/elasticsearch/templates/statefulset.yaml
+index b4f6a98..daad8b1 100644
+--- a/elasticsearch/templates/statefulset.yaml
++++ b/elasticsearch/templates/statefulset.yaml
+@@ -214,8 +214,8 @@ spec:
+                 }
+ 
+                 if [ -f "${START_FILE}" ]; then
+-                    echo 'Elasticsearch is already running, lets check the node is healthy and there are master nodes available'
+-                    http "/_cluster/health?timeout=0s"
++                    echo 'Elasticsearch is already running, lets check the node is healthy'
++                    http "/_cluster/health?{{ .Values.clusterHealthCheckParamsBasic }}"
+                 else
+                     DATA_NODE=$(printenv node.data)
+                     if [[ "$DATA_NODE" == true ]]; then
+-- 
+2.20.1
+
