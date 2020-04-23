@@ -41,10 +41,14 @@ data:
         type: "NodePort"
         nodePorts:
           http: 31001
+          udp:
+            25826: 31005
       livenessProbe:
         initialDelaySeconds: 30
       readinessProbe:
         initialDelaySeconds: 30
+    udp:
+      25826: "monitor/mon-logstash:25826"
     defaultBackend:
       image:
         repository: k8s.gcr.io/defaultbackend
@@ -957,10 +961,8 @@ data:
       logstash.conf: |
         input {
           udp {
-            #Note default port 25826 in use by influxdb.
-            #port => 25826
             host => "::"
-            port => 31005
+            port => 25826
             buffer_size => 1452
             codec => collectd { }
             type => 'collectd'
@@ -1013,26 +1015,18 @@ data:
       periodSeconds: 60
       timeoutSeconds: 60
     ports:
-      # influxdb port conflict, can't use 25826
-      # - containerPort: 25826
-      # name: collectd-udp
-      # protocol: UDP
-      - containerPort: 31005
-        name: collectd-udp
+      - containerPort: 25826
+        name: collectd
         protocol: UDP
       - containerPort: 5044
         name: beats
         protocol: TCP
     service:
       ports:
-        - name: collectd-udp
-          port: 31005
-          targetPort: collectd-udp
+        - name: collectd
+          port: 25826
+          targetPort: collectd
           protocol: UDP
-        - name: monitor
-          port: 9600
-          targetPort: monitor
-          protocol: TCP
         - name: beats
           port: 5044
           targetPort: beats
