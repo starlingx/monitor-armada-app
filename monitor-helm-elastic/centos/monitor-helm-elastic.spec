@@ -28,6 +28,7 @@ Patch07: 0007-Add-command-and-args-parameters-to-beats-and-logstash.patch
 Patch08: 0008-Add-updateStrategy-parameter-to-beats-config.patch
 Patch10: 0010-Fix-esConfig-checksum-annotation.patch
 Patch11: 0011-Fix-Elasticsearch-readiness-probe-http-endpoint.patch
+Patch12: 0012-Add-logstash-ingress.patch
 
 BuildRequires: helm
 
@@ -46,6 +47,7 @@ Monitor Helm elasticsearch charts
 %patch08 -p1
 %patch10 -p1
 %patch11 -p1
+%patch12 -p1
 
 %build
 # initialize helm and build the toolkit
