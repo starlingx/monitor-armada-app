@@ -1,0 +1,5 @@
+monitor-helm-elastic (1.0-1) unstable; urgency=medium
+
+  * Initial release.
+
+ --  Tracey Bogue <tracey.bogue@windriver.com>  Tue, 2 Nov 2021 14:06:42 +0000

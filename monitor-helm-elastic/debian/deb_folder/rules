@@ -1,0 +1,42 @@
+#!/usr/bin/make -f
+# export DH_VERBOSE = 1
+
+export ROOT = debian/tmp
+export HELM_FOLDER = $(ROOT)/usr/lib/helm
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	# Move the source files from the extracted root directory to build root.
+	mv helm-charts-elastic/* .
+	# Apply the openstack-helm patches.
+	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0001-add-makefile.patch
+	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0002-use-oss-image.patch
+	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0003-set-initial-masters-to-master-0.patch
+	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0004-Update-Elastic-Apps-to-7.6.0-Releases.patch
+	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0005-readiness-probe-enhancements.patch
+	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0006-Metricbeat-nodeSelector-and-tolerations-config.patch
+	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0007-Add-command-and-args-parameters-to-beats-and-logstash.patch
+	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0008-Add-updateStrategy-parameter-to-beats-config.patch
+	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0010-Fix-esConfig-checksum-annotation.patch
+	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0011-Fix-Elasticsearch-readiness-probe-http-endpoint.patch
+	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0012-Add-logstash-ingress.patch
+	# Host a server for the helm charts.
+	chartmuseum --debug --port=8879 --context-path='/charts' --storage="local" --storage-local-rootdir="." &
+	sleep 2
+	helm repo add local http://localhost:8879/charts
+	# Create the chart TGZ files.
+	rm elasticsearch/Makefile kibana/Makefile filebeat/Makefile metricbeat/Makefile logstash/Makefile
+	make elasticsearch
+	make kibana
+	make filebeat
+	make metricbeat
+	make logstash
+	# Terminate the helm chart server.
+	pkill chartmuseum
+
+override_dh_auto_install:
+	# Install the app tar file.
+	install -d -m 755 $(HELM_FOLDER)
+	install -p -D -m 755 *.tgz $(HELM_FOLDER)

@@ -1,0 +1,18 @@
+#!/usr/bin/make -f
+# export DH_VERBOSE = 1
+
+export ROOT = debian/tmp
+export APP_FOLDER = $(ROOT)/usr/lib/application
+export ARMADA_FOLDER = $(ROOT)/usr/lib/armada
+
+%:
+	dh $@
+
+override_dh_auto_build:
+
+override_dh_auto_install:
+	# Install the app files.
+	install -d -m 755 $(ARMADA_FOLDER)
+	install -p -D -m 755 manifests/*.yaml $(ARMADA_FOLDER)
+	install -d -m 755 $(APP_FOLDER)
+	install -p -D -m 755 files/metadata.yaml $(APP_FOLDER)
