@@ -1,0 +1,11 @@
+0001-add-makefile.patch
+0002-use-oss-image.patch
+0003-set-initial-masters-to-master-0.patch
+0004-Update-Elastic-Apps-to-7.6.0-Releases.patch
+0005-readiness-probe-enhancements.patch
+0006-Metricbeat-nodeSelector-and-tolerations-config.patch
+0007-Add-command-and-args-parameters-to-beats-and-logstash.patch
+0008-Add-updateStrategy-parameter-to-beats-config.patch
+0010-Fix-esConfig-checksum-annotation.patch
+0011-Fix-Elasticsearch-readiness-probe-http-endpoint.patch
+0012-Add-logstash-ingress.patch

@@ -1,0 +1,91 @@
+From 36ea0e2a2fd6cf6ac8cb19411c14c5ef4d0618f9 Mon Sep 17 00:00:00 2001
+From: Kevin Smith <kevin.smith@windriver.com>
+Date: Mon, 23 Mar 2020 10:43:07 -0400
+Subject: [PATCH 1/1] readiness probe enhancements
+
+---
+ elasticsearch/templates/statefulset.yaml | 46 +++++++++++++++++++++++++++-----
+ elasticsearch/values.yaml                |  2 ++
+ 2 files changed, 41 insertions(+), 7 deletions(-)
+
+diff --git a/elasticsearch/templates/statefulset.yaml b/elasticsearch/templates/statefulset.yaml
+index e17d39e..483e1f4 100644
+--- a/elasticsearch/templates/statefulset.yaml
++++ b/elasticsearch/templates/statefulset.yaml
+@@ -202,7 +202,7 @@ spec:
+                 # If the node is starting up wait for the cluster to be ready (request params: '{{ .Values.clusterHealthCheckParams }}' )
+                 # Once it has started only check that the node itself is responding
+                 START_FILE=/tmp/.es_start_file
+-
++               
+                 http () {
+                     local path="${1}"
+                     if [ -n "${ELASTIC_USERNAME}" ] && [ -n "${ELASTIC_PASSWORD}" ]; then
+@@ -217,13 +217,45 @@ spec:
+                     echo 'Elasticsearch is already running, lets check the node is healthy and there are master nodes available'
+                     http "/_cluster/health?timeout=0s"
+                 else
+-                    echo 'Waiting for elasticsearch cluster to become ready (request params: "{{ .Values.clusterHealthCheckParams }}" )'
+-                    if http "/_cluster/health?{{ .Values.clusterHealthCheckParams }}" ; then
+-                        touch ${START_FILE}
+-                        exit 0
++                    DATA_NODE=$(printenv node.data)
++                    if [[ "$DATA_NODE" == true ]]; then
++                        # This is a data node, check for health depending on whether we can
++                        # reach the master node and how many data nodes there are.
++                        DATA_NODE_COUNT=$(http "/_cat/nodes?master_timeout=1s" | grep -c data)
++                        echo "data node count = $DATA_NODE_COUNT"
++                        if [[ $DATA_NODE_COUNT -gt 1 ]]; then
++                            # We connected to master and there is more than one data node.
++                            echo 'Waiting for elasticsearch cluster to become ready (request params: "{{ .Values.clusterHealthCheckParams }}" )'
++                            if http "/_cluster/health?{{ .Values.clusterHealthCheckParams }}" ; then
++                                touch ${START_FILE}
++                                exit 0
++                            else
++                                echo 'Cluster is not yet ready (request params: "{{ .Values.clusterHealthCheckParams }}" )'
++                                exit 1
++                            fi
++                        else
++                            # Cannot connect to the master or we are the only data node
++                            # found. Could be DOR, AIO-SX, other host is locked and we
++                            # experienced a pod restart or other similar scenario.
++                            echo "Cannot connect to master or less than 2 data nodes"
++                            echo 'Waiting for elasticsearch cluster to become ready (request params: "{{ .Values.clusterHealthCheckParamsBasic }}" )'
++                            if http "/_cluster/health?{{ .Values.clusterHealthCheckParamsBasic }}" ; then
++                                touch ${START_FILE}
++                                exit 0
++                            else
++                                echo 'Cluster is not yet ready (request params: "{{ .Values.clusterHealthCheckParamsBasic }}" )'
++                                exit 1
++                            fi
++                        fi
+                     else
+-                        echo 'Cluster is not yet ready (request params: "{{ .Values.clusterHealthCheckParams }}" )'
+-                        exit 1
++                        echo 'Waiting for elasticsearch cluster to become ready (request params: "{{ .Values.clusterHealthCheckParams }}" )'
++                        if http "/_cluster/health?{{ .Values.clusterHealthCheckParams }}" ; then
++                            touch ${START_FILE}
++                            exit 0
++                        else
++                            echo 'Cluster is not yet ready (request params: "{{ .Values.clusterHealthCheckParams }}" )'
++                            exit 1
++                        fi
+                     fi
+                 fi
+         ports:
+diff --git a/elasticsearch/values.yaml b/elasticsearch/values.yaml
+index 0d983eb..ebbae6c 100755
+--- a/elasticsearch/values.yaml
++++ b/elasticsearch/values.yaml
+@@ -204,6 +204,8 @@ readinessProbe:
+ 
+ # https://www.elastic.co/guide/en/elasticsearch/reference/current/cluster-health.html#request-params wait_for_status
+ clusterHealthCheckParams: "wait_for_status=green&timeout=1s"
++# Used for readiness probe when on a data node and only a basic health check is needed.
++clusterHealthCheckParamsBasic: "local=true"
+ 
+ ## Use an alternate scheduler.
+ ## ref: https://kubernetes.io/docs/tasks/administer-cluster/configure-multiple-schedulers/
+-- 
+1.8.3.1
+

@@ -1,0 +1,69 @@
+From f65eaa1fb2dcfb913d22c152e84771507f99d6bd Mon Sep 17 00:00:00 2001
+From: Simon Cousineau <Simon.Cousineau@windriver.com>
+Date: Tue, 14 Apr 2020 11:05:18 -0400
+Subject: [PATCH 1/1] Add updateStrategy parameter to beats config
+
+---
+ filebeat/templates/daemonset.yaml   | 2 +-
+ filebeat/values.yaml                | 3 ++-
+ metricbeat/templates/daemonset.yaml | 2 +-
+ metricbeat/values.yaml              | 3 ++-
+ 4 files changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/filebeat/templates/daemonset.yaml b/filebeat/templates/daemonset.yaml
+index 6e8be91..9ab5255 100644
+--- a/filebeat/templates/daemonset.yaml
++++ b/filebeat/templates/daemonset.yaml
+@@ -17,7 +17,7 @@ spec:
+       app: "{{ template "filebeat.fullname" . }}"
+       release: {{ .Release.Name | quote }}
+   updateStrategy:
+-    type: {{ .Values.updateStrategy }}
++{{ toYaml .Values.updateStrategy | indent 4 }}
+   template:
+     metadata:
+       annotations:
+diff --git a/filebeat/values.yaml b/filebeat/values.yaml
+index f83a19f..21d4682 100755
+--- a/filebeat/values.yaml
++++ b/filebeat/values.yaml
+@@ -130,7 +130,8 @@ affinity: {}
+ # https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass
+ priorityClassName: ""
+ 
+-updateStrategy: RollingUpdate
++updateStrategy:
++  type: RollingUpdate
+ 
+ # Override various naming aspects of this chart
+ # Only edit these if you know what you're doing
+diff --git a/metricbeat/templates/daemonset.yaml b/metricbeat/templates/daemonset.yaml
+index 0fa38c3..f193ba0 100644
+--- a/metricbeat/templates/daemonset.yaml
++++ b/metricbeat/templates/daemonset.yaml
+@@ -17,7 +17,7 @@ spec:
+       app: "{{ template "metricbeat.fullname" . }}"
+       release: {{ .Release.Name | quote }}
+   updateStrategy:
+-    type: {{ .Values.updateStrategy }}
++{{ toYaml .Values.updateStrategy | indent 4 }}
+   template:
+     metadata:
+       annotations:
+diff --git a/metricbeat/values.yaml b/metricbeat/values.yaml
+index 6d53f3e..39e2811 100755
+--- a/metricbeat/values.yaml
++++ b/metricbeat/values.yaml
+@@ -206,7 +206,8 @@ affinity: {}
+ # https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass
+ priorityClassName: ""
+ 
+-updateStrategy: RollingUpdate
++updateStrategy:
++  type: RollingUpdate
+ 
+ # Override various naming aspects of this chart
+ # Only edit these if you know what you're doing
+-- 
+2.20.1
+

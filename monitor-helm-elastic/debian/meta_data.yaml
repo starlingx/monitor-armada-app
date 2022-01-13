@@ -1,7 +1,13 @@
 ---
 debname: monitor-helm-elastic
 debver: 1.0-1
-dl_hook: dl_hook
+dl_path:
+  name: helm-charts-elastic-945017287598479ba8653d9baf3ff26f7fe31e50.tar.gz
+  url: https://github.com/elastic/helm-charts/archive/945017287598479ba8653d9baf3ff26f7fe31e50.tar.gz
+  md5sum: 2b0231eececb1b8bae904d68c4088828
+src_files:
+  - files/index.yaml
+  - files/repositories.yaml
 revision:
   dist: $STX_DIST
   PKG_GITREVCOUNT: true

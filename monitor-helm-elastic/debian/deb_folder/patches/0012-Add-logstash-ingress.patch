@@ -1,0 +1,104 @@
+From cfec1478af37aead4743d31d0f9b8840e98dd53a Mon Sep 17 00:00:00 2001
+From: Matt Peters <matt.peters@windriver.com>
+Date: Sun, 26 Apr 2020 07:30:47 -0500
+Subject: [PATCH] Add logstash ingress
+
+---
+ logstash/README.md              |  1 +
+ logstash/templates/_helpers.tpl | 11 +++++++++++
+ logstash/templates/ingress.yaml | 22 ++++++++++++++++++++++
+ logstash/values.yaml            | 18 ++++++++++++++++++
+ 4 files changed, 52 insertions(+)
+ create mode 100644 logstash/templates/ingress.yaml
+
+diff --git a/logstash/README.md b/logstash/README.md
+index 3b2a069..c1e834e 100644
+--- a/logstash/README.md
++++ b/logstash/README.md
+@@ -101,6 +101,7 @@ helm install --name logstash elastic/logstash --set imageTag=7.6.0
+ | `volumeClaimTemplate`         | Configuration for the [volumeClaimTemplate for statefulsets](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#stable-storage). You will want to adjust the storage (default `30Gi`) and the `storageClassName` if you are using a different storage class                                            | `accessModes: [ "ReadWriteOnce" ]`<br>`resources.requests.storage: 1Gi`                                                    |
+ | `rbac`                        | Configuration for creating a role, role binding and service account as part of this helm chart with `create: true`. Also can be used to reference an external service account with `serviceAccountName: "externalServiceAccountName"`.                                                                                     | `create: false`<br>`serviceAccountName: ""`                                                                                |
+ | `fullnameOverride`            | Overrides the full name of the resources. If not set the name will default to "`.Release.Name`-`.Values.nameOverride or .Chart.Name`"                                                                                                                                                                                      | `""`                                                                                                                       |
++| `ingress`                 | Configurable [ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/) to expose the Kibana service. See [`values.yaml`](https://github.com/elastic/helm-charts/tree/master/kibana/values.yaml) for an example                                                                                                                               | `enabled: false`                                                                                                          |
+ 
+ ## Try it out
+ 
+diff --git a/logstash/templates/_helpers.tpl b/logstash/templates/_helpers.tpl
+index a0a0321..3a5bb03 100755
+--- a/logstash/templates/_helpers.tpl
++++ b/logstash/templates/_helpers.tpl
+@@ -34,3 +34,14 @@ Return the appropriate apiVersion for statefulset.
+ {{- print "apps/v1" -}}
+ {{- end -}}
+ {{- end -}}
++
++{{/*
++Return the appropriate apiVersion for ingress.
++*/}}
++{{- define "logstash.ingress.apiVersion" -}}
++{{- if semverCompare "<1.14-0" .Capabilities.KubeVersion.GitVersion -}}
++{{- print "extensions/v1beta1" -}}
++{{- else -}}
++{{- print "networking.k8s.io/v1beta1" -}}
++{{- end -}}
++{{- end -}}
+diff --git a/logstash/templates/ingress.yaml b/logstash/templates/ingress.yaml
+new file mode 100644
+index 0000000..c4015da
+--- /dev/null
++++ b/logstash/templates/ingress.yaml
+@@ -0,0 +1,22 @@
++{{- if .Values.ingress.enabled -}}
++{{- $fullName := include "logstash.fullname" . -}}
++apiVersion: {{ template "logstash.ingress.apiVersion" . }}
++kind: Ingress
++metadata:
++  name: {{ $fullName }}
++  labels:
++    app: {{ .Chart.Name }}
++    release: {{ .Release.Name }}
++    heritage: {{ .Release.Service }}
++{{- with .Values.ingress.annotations }}
++  annotations:
++{{ toYaml . | indent 4 }}
++{{- end }}
++spec:
++{{- if .Values.ingress.tls }}
++  tls:
++{{ toYaml .Values.ingress.tls | indent 4 }}
++{{- end }}
++  rules:
++{{ toYaml .Values.ingress.rules | indent 4 }}
++{{- end }}
+diff --git a/logstash/values.yaml b/logstash/values.yaml
+index 9fedf40..23fe503 100755
+--- a/logstash/values.yaml
++++ b/logstash/values.yaml
+@@ -207,6 +207,24 @@ service: {}
+ #      protocol: TCP
+ #      targetPort: 8080
+ 
++ingress:
++  enabled: false
++  annotations: {}
++    # kubernetes.io/ingress.class: nginx
++    # kubernetes.io/tls-acme: "true"
++  tls: []
++  #  - secretName: chart-example-tls
++  #    hosts:
++  #      - chart-example.local
++  rules: []
++  #  - host: chart-example.local
++  #    http:
++  #      paths:
++  #        - path: /http
++  #          backend:
++  #            serviceName: logstash
++  #            servicePort: 8080
++
+ # pass custom command. This is equivalent of Entrypoint in docker
+ command: []
+ 
+-- 
+2.24.0
+
