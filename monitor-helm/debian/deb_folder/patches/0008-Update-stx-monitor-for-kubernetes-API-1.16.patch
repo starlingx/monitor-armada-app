@@ -1,0 +1,316 @@
+From f82b9b85ac03f59fd1ce9b7eb0a9ed2afac47995 Mon Sep 17 00:00:00 2001
+From: John Kung <john.kung@windriver.com>
+Date: Sun, 6 Oct 2019 12:50:45 -0400
+Subject: [PATCH 1/1] 0008-Update-stx-monitor-for-kubernetes-API-1.16
+
+---
+ stable/elasticsearch/templates/client-deployment.yaml          | 6 +++++-
+ stable/elasticsearch/templates/client-ingress.yaml             | 2 +-
+ stable/elasticsearch/templates/data-statefulset.yaml           | 7 ++++++-
+ stable/elasticsearch/templates/master-statefulset.yaml         | 7 ++++++-
+ stable/elasticsearch/templates/podsecuritypolicy.yaml          | 2 +-
+ stable/filebeat/templates/daemonset.yaml                       | 2 +-
+ stable/filebeat/templates/podsecuritypolicy.yaml               | 2 +-
+ stable/kibana/templates/deployment.yaml                        | 6 +++++-
+ stable/kibana/templates/ingress.yaml                           | 2 +-
+ stable/kube-state-metrics/templates/deployment.yaml            | 5 ++++-
+ stable/kube-state-metrics/templates/podsecuritypolicy.yaml     | 2 +-
+ stable/logstash/templates/ingress.yaml                         | 2 +-
+ stable/logstash/templates/statefulset.yaml                     | 2 +-
+ stable/metricbeat/templates/podsecuritypolicy.yaml             | 2 +-
+ stable/nginx-ingress/templates/controller-daemonset.yaml       | 6 +++++-
+ stable/nginx-ingress/templates/controller-deployment.yaml      | 6 +++++-
+ stable/nginx-ingress/templates/default-backend-deployment.yaml | 6 +++++-
+ stable/nginx-ingress/templates/podsecuritypolicy.yaml          | 2 +-
+ 18 files changed, 51 insertions(+), 18 deletions(-)
+
+diff --git a/stable/elasticsearch/templates/client-deployment.yaml b/stable/elasticsearch/templates/client-deployment.yaml
+index 5625ee0..8bd1b15 100644
+--- a/stable/elasticsearch/templates/client-deployment.yaml
++++ b/stable/elasticsearch/templates/client-deployment.yaml
+@@ -1,4 +1,4 @@
+-apiVersion: apps/v1beta1
++apiVersion: apps/v1
+ kind: Deployment
+ metadata:
+   labels:
+@@ -9,6 +9,10 @@ metadata:
+     release: {{ .Release.Name }}
+   name: {{ template "elasticsearch.client.fullname" . }}
+ spec:
++  selector:
++    matchLabels:
++      app: {{ template "elasticsearch.name" . }}
++      release: {{ .Release.Name }}
+   replicas: {{ .Values.client.replicas }}
+   template:
+     metadata:
+diff --git a/stable/elasticsearch/templates/client-ingress.yaml b/stable/elasticsearch/templates/client-ingress.yaml
+index 9070cdd..8eb4b9a 100644
+--- a/stable/elasticsearch/templates/client-ingress.yaml
++++ b/stable/elasticsearch/templates/client-ingress.yaml
+@@ -1,7 +1,7 @@
+ {{- if .Values.client.ingress.enabled -}}
+ {{- $fullName := include "elasticsearch.client.fullname" . -}}
+ {{- $ingressPath := .Values.client.ingress.path -}}
+-apiVersion: extensions/v1beta1
++apiVersion: networking.k8s.io/v1beta1
+ kind: Ingress
+ metadata:
+   name: {{ $fullName }}
+diff --git a/stable/elasticsearch/templates/data-statefulset.yaml b/stable/elasticsearch/templates/data-statefulset.yaml
+index 69b54cd..ccf7ad2 100644
+--- a/stable/elasticsearch/templates/data-statefulset.yaml
++++ b/stable/elasticsearch/templates/data-statefulset.yaml
+@@ -1,4 +1,4 @@
+-apiVersion: apps/v1beta1
++apiVersion: apps/v1
+ kind: StatefulSet
+ metadata:
+   labels:
+@@ -11,6 +11,11 @@ metadata:
+ spec:
+   serviceName: {{ template "elasticsearch.data.fullname" . }}
+   replicas: {{ .Values.data.replicas }}
++  selector:
++    matchLabels:
++      app: {{ template "elasticsearch.name" . }}
++      component: "{{ .Values.data.name }}"
++      release: {{ .Release.Name }}
+   template:
+     metadata:
+       labels:
+diff --git a/stable/elasticsearch/templates/master-statefulset.yaml b/stable/elasticsearch/templates/master-statefulset.yaml
+index 7c48fe3..aa7014d 100644
+--- a/stable/elasticsearch/templates/master-statefulset.yaml
++++ b/stable/elasticsearch/templates/master-statefulset.yaml
+@@ -1,4 +1,4 @@
+-apiVersion: apps/v1beta1
++apiVersion: apps/v1
+ kind: StatefulSet
+ metadata:
+   labels:
+@@ -11,6 +11,11 @@ metadata:
+ spec:
+   serviceName: {{ template "elasticsearch.master.fullname" . }}
+   replicas: {{ .Values.master.replicas }}
++  selector:
++    matchLabels:
++      app: {{ template "elasticsearch.name" . }}
++      component: "{{ .Values.master.name }}"
++      release: {{ .Release.Name }}
+   template:
+     metadata:
+       labels:
+diff --git a/stable/elasticsearch/templates/podsecuritypolicy.yaml b/stable/elasticsearch/templates/podsecuritypolicy.yaml
+index ee38e35..fd5f663 100644
+--- a/stable/elasticsearch/templates/podsecuritypolicy.yaml
++++ b/stable/elasticsearch/templates/podsecuritypolicy.yaml
+@@ -1,5 +1,5 @@
+ {{- if .Values.podSecurityPolicy.enabled }}
+-apiVersion: extensions/v1beta1
++apiVersion: policy/v1beta1
+ kind: PodSecurityPolicy
+ metadata:
+   name: {{ template "elasticsearch.fullname" . }}
+diff --git a/stable/filebeat/templates/daemonset.yaml b/stable/filebeat/templates/daemonset.yaml
+index b1833a9..22b46df 100644
+--- a/stable/filebeat/templates/daemonset.yaml
++++ b/stable/filebeat/templates/daemonset.yaml
+@@ -1,4 +1,4 @@
+-apiVersion: apps/v1beta2
++apiVersion: apps/v1
+ kind: DaemonSet
+ metadata:
+   name: {{ template "filebeat.fullname" . }}
+diff --git a/stable/filebeat/templates/podsecuritypolicy.yaml b/stable/filebeat/templates/podsecuritypolicy.yaml
+index 3a11b38..25a0f06 100644
+--- a/stable/filebeat/templates/podsecuritypolicy.yaml
++++ b/stable/filebeat/templates/podsecuritypolicy.yaml
+@@ -1,6 +1,6 @@
+ {{- if .Values.rbac.create -}}
+ {{- if .Values.podSecurityPolicy.enabled }}
+-apiVersion: extensions/v1beta1
++apiVersion: policy/v1beta1
+ kind: PodSecurityPolicy
+ metadata:
+   name: {{ template "filebeat.fullname" . }}
+diff --git a/stable/kibana/templates/deployment.yaml b/stable/kibana/templates/deployment.yaml
+index 33fc6f0..c5229ae 100644
+--- a/stable/kibana/templates/deployment.yaml
++++ b/stable/kibana/templates/deployment.yaml
+@@ -1,4 +1,4 @@
+-apiVersion: apps/v1beta1
++apiVersion: apps/v1
+ kind: Deployment
+ metadata:
+   labels:
+@@ -13,6 +13,10 @@ metadata:
+ {{- end }}
+ spec:
+   replicas: {{ .Values.replicaCount }}
++  selector:
++    matchLabels:
++      app: {{ template "kibana.name" . }}
++      release: {{ .Release.Name }}
+   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+   template:
+     metadata:
+diff --git a/stable/kibana/templates/ingress.yaml b/stable/kibana/templates/ingress.yaml
+index de14ae9..9d97e26 100644
+--- a/stable/kibana/templates/ingress.yaml
++++ b/stable/kibana/templates/ingress.yaml
+@@ -1,7 +1,7 @@
+ {{- if .Values.ingress.enabled -}}
+ {{- $serviceName := include "kibana.fullname" . -}}
+ {{- $servicePort := .Values.service.externalPort -}}
+-apiVersion: extensions/v1beta1
++apiVersion: networking.k8s.io/v1beta1
+ kind: Ingress
+ metadata:
+   labels:
+diff --git a/stable/kube-state-metrics/templates/deployment.yaml b/stable/kube-state-metrics/templates/deployment.yaml
+index b251758..ce02f8e 100644
+--- a/stable/kube-state-metrics/templates/deployment.yaml
++++ b/stable/kube-state-metrics/templates/deployment.yaml
+@@ -1,4 +1,4 @@
+-apiVersion: extensions/v1beta1
++apiVersion: apps/v1
+ kind: Deployment
+ metadata:
+   name: {{ template "kube-state-metrics.fullname" . }}
+@@ -8,6 +8,9 @@ metadata:
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}"
+ spec:
++  selector:
++    matchLabels:
++      app: {{ template "kube-state-metrics.name" . }}
+   replicas: {{ .Values.replicas }}
+   template:
+     metadata:
+diff --git a/stable/kube-state-metrics/templates/podsecuritypolicy.yaml b/stable/kube-state-metrics/templates/podsecuritypolicy.yaml
+index d195a5f..4ca46ac 100644
+--- a/stable/kube-state-metrics/templates/podsecuritypolicy.yaml
++++ b/stable/kube-state-metrics/templates/podsecuritypolicy.yaml
+@@ -1,5 +1,5 @@
+ {{- if .Values.podSecurityPolicy.enabled }}
+-apiVersion: extensions/v1beta1
++apiVersion: policy/v1beta1
+ kind: PodSecurityPolicy
+ metadata:
+   name: {{ template "kube-state-metrics.fullname" . }}
+diff --git a/stable/logstash/templates/ingress.yaml b/stable/logstash/templates/ingress.yaml
+index 0e26f89..d107a32 100644
+--- a/stable/logstash/templates/ingress.yaml
++++ b/stable/logstash/templates/ingress.yaml
+@@ -1,7 +1,7 @@
+ {{- if .Values.ingress.enabled -}}
+ {{- $fullName := include "logstash.fullname" . -}}
+ {{- $ingressPath := .Values.ingress.path -}}
+-apiVersion: extensions/v1beta1
++apiVersion: networking.k8s.io/v1beta1
+ kind: Ingress
+ metadata:
+   name: {{ $fullName }}
+diff --git a/stable/logstash/templates/statefulset.yaml b/stable/logstash/templates/statefulset.yaml
+index 070ef56..1a1a3ef 100644
+--- a/stable/logstash/templates/statefulset.yaml
++++ b/stable/logstash/templates/statefulset.yaml
+@@ -1,4 +1,4 @@
+-apiVersion: apps/v1beta2
++apiVersion: apps/v1
+ kind: StatefulSet
+ metadata:
+   name: {{ template "logstash.fullname" . }}
+diff --git a/stable/metricbeat/templates/podsecuritypolicy.yaml b/stable/metricbeat/templates/podsecuritypolicy.yaml
+index 29fb2a9..90231e2 100644
+--- a/stable/metricbeat/templates/podsecuritypolicy.yaml
++++ b/stable/metricbeat/templates/podsecuritypolicy.yaml
+@@ -1,5 +1,5 @@
+ {{- if .Values.rbac.pspEnabled }}
+-apiVersion: extensions/v1beta1
++apiVersion: policy/v1beta1
+ kind: PodSecurityPolicy
+ metadata:
+   name: {{ template "metricbeat.fullname" . }}
+diff --git a/stable/nginx-ingress/templates/controller-daemonset.yaml b/stable/nginx-ingress/templates/controller-daemonset.yaml
+index a05062e..c6e8271 100644
+--- a/stable/nginx-ingress/templates/controller-daemonset.yaml
++++ b/stable/nginx-ingress/templates/controller-daemonset.yaml
+@@ -1,5 +1,5 @@
+ {{- if eq .Values.controller.kind "DaemonSet" }}
+-apiVersion: extensions/v1beta1
++apiVersion: apps/v1
+ kind: DaemonSet
+ metadata:
+   labels:
+@@ -10,6 +10,10 @@ metadata:
+     release: {{ .Release.Name }}
+   name: {{ template "nginx-ingress.controller.fullname" . }}
+ spec:
++  selector:
++    matchLabels:
++      app: {{ template "nginx-ingress.name" . }}
++      release: {{ .Release.Name }}
+   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+   updateStrategy:
+ {{ toYaml .Values.controller.updateStrategy | indent 4 }}
+diff --git a/stable/nginx-ingress/templates/controller-deployment.yaml b/stable/nginx-ingress/templates/controller-deployment.yaml
+index 7d78507..f653c8a 100644
+--- a/stable/nginx-ingress/templates/controller-deployment.yaml
++++ b/stable/nginx-ingress/templates/controller-deployment.yaml
+@@ -1,5 +1,5 @@
+ {{- if eq .Values.controller.kind "Deployment" }}
+-apiVersion: extensions/v1beta1
++apiVersion: apps/v1
+ kind: Deployment
+ metadata:
+   labels:
+@@ -10,6 +10,10 @@ metadata:
+     release: {{ .Release.Name }}
+   name: {{ template "nginx-ingress.controller.fullname" . }}
+ spec:
++  selector:
++    matchLabels:
++      app: {{ template "nginx-ingress.name" . }}
++      release: {{ .Release.Name }}
+   replicas: {{ .Values.controller.replicaCount }}
+   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+   strategy:
+diff --git a/stable/nginx-ingress/templates/default-backend-deployment.yaml b/stable/nginx-ingress/templates/default-backend-deployment.yaml
+index 93ea613..399b798 100644
+--- a/stable/nginx-ingress/templates/default-backend-deployment.yaml
++++ b/stable/nginx-ingress/templates/default-backend-deployment.yaml
+@@ -1,5 +1,5 @@
+ {{- if .Values.defaultBackend.enabled }}
+-apiVersion: extensions/v1beta1
++apiVersion: apps/v1
+ kind: Deployment
+ metadata:
+   labels:
+@@ -10,6 +10,10 @@ metadata:
+     release: {{ .Release.Name }}
+   name: {{ template "nginx-ingress.defaultBackend.fullname" . }}
+ spec:
++  selector:
++     matchLabels:
++       app: {{ template "nginx-ingress.name" . }}
++       release: {{ .Release.Name }}
+   replicas: {{ .Values.defaultBackend.replicaCount }}
+   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+   template:
+diff --git a/stable/nginx-ingress/templates/podsecuritypolicy.yaml b/stable/nginx-ingress/templates/podsecuritypolicy.yaml
+index 9222daf..b99aee8 100644
+--- a/stable/nginx-ingress/templates/podsecuritypolicy.yaml
++++ b/stable/nginx-ingress/templates/podsecuritypolicy.yaml
+@@ -1,5 +1,5 @@
+ {{- if .Values.podSecurityPolicy.enabled}}
+-apiVersion: extensions/v1beta1
++apiVersion: policy/v1beta1
+ kind: PodSecurityPolicy
+ metadata:
+   name: {{ template "nginx-ingress.fullname" . }} 
+-- 
+1.8.3.1
+

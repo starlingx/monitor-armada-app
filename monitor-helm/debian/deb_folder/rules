@@ -8,27 +8,6 @@ export HELM_FOLDER = $(ROOT)/usr/lib/helm
 	dh $@
 
 override_dh_auto_build:
-	# Move the source files from the extracted root directory to build root.
-	mv helm-charts/* .
-	# Apply the openstack-helm patches.
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0001-Add-Makefile-for-helm-charts.patch
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0002-kibana-workaround-checksum-for-configmap.yaml.patch
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0003-helm-chart-changes-for-stx-monitor.patch
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0004-ipv6-helm-chart-changes.patch
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0005-decouple-config.patch
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0006-add-system-info.patch
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0007-three-masters.patch
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0008-Update-stx-monitor-for-kubernetes-API-1.16.patch
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0009-add-curator-as-of-2019-10-10.patch
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0010-Update-kube-state-metrics-1.8.0-to-commit-09daf19.patch
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0011-update-init-container-env-to-include-node-name.patch
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0012-Add-imagePullSecrets.patch
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0013-removed-unused-images.patch
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0014-Add-rbac-replicasets-to-apps-apigroup-commit-1717e2d.patch
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0015-script-flexibility.patch
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0016-use-main-container-image-for-initcontainer.patch
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0017-stable-nginx-ingress-allow-nodePort-for-tcp-udp-serv.patch
-	patch --no-backup-if-mismatch --prefix=/tmp/junk -p1 < 0018-Update-nginx-ingress-chart-for-Helm-v3.patch
 	# Host a server for the helm charts.
 	chartmuseum --debug --port=8879 --context-path='/charts' --storage="local" \
 		--storage-local-rootdir="." &

@@ -1,0 +1,622 @@
+From 3f950814b953c6806100404f5e43bd16ce86f6fd Mon Sep 17 00:00:00 2001
+From: John Kung <john.kung@windriver.com>
+Date: Fri, 18 Oct 2019 17:01:14 -0400
+Subject: [PATCH 1/1] Update kube-state-metrics 1.8.0, to commit 09daf19
+
+---
+ stable/kube-state-metrics/Chart.yaml               |  7 +-
+ stable/kube-state-metrics/OWNERS                   |  8 ++
+ stable/kube-state-metrics/README.md                | 96 ++++++++++++----------
+ stable/kube-state-metrics/templates/NOTES.txt      |  2 +-
+ .../kube-state-metrics/templates/clusterrole.yaml  | 38 +++++++--
+ .../templates/clusterrolebinding.yaml              |  8 +-
+ .../kube-state-metrics/templates/deployment.yaml   | 52 +++++++++---
+ .../templates/podsecuritypolicy.yaml               | 10 +--
+ .../templates/psp-clusterrole.yaml                 |  8 +-
+ .../templates/psp-clusterrolebinding.yaml          |  8 +-
+ stable/kube-state-metrics/templates/service.yaml   | 22 +++--
+ .../templates/serviceaccount.yaml                  | 10 +--
+ .../templates/servicemonitor.yaml                  | 24 ++++++
+ stable/kube-state-metrics/values.yaml              | 24 +++++-
+ 14 files changed, 220 insertions(+), 97 deletions(-)
+ create mode 100644 stable/kube-state-metrics/OWNERS
+ create mode 100644 stable/kube-state-metrics/templates/servicemonitor.yaml
+
+diff --git a/stable/kube-state-metrics/Chart.yaml b/stable/kube-state-metrics/Chart.yaml
+index 2f0f39d..283e1ac 100644
+--- a/stable/kube-state-metrics/Chart.yaml
++++ b/stable/kube-state-metrics/Chart.yaml
+@@ -5,11 +5,14 @@ keywords:
+ - metric
+ - monitoring
+ - prometheus
+-version: 0.16.0
+-appVersion: 1.5.0
++- kubernetes
++version: 2.4.1
++appVersion: 1.8.0
+ home: https://github.com/kubernetes/kube-state-metrics/
+ sources:
+ - https://github.com/kubernetes/kube-state-metrics/
+ maintainers:
+ - name: fiunchinho
+   email: jose@armesto.net
++- name: tariq1890
++  email: tariq.ibrahim@mulesoft.com
+diff --git a/stable/kube-state-metrics/OWNERS b/stable/kube-state-metrics/OWNERS
+new file mode 100644
+index 0000000..6ffd97d
+--- /dev/null
++++ b/stable/kube-state-metrics/OWNERS
+@@ -0,0 +1,8 @@
++approvers:
++- fiunchinho
++- tariq1890
++- mrueg
++reviewers:
++- fiunchinho
++- tariq1890
++- mrueg
+diff --git a/stable/kube-state-metrics/README.md b/stable/kube-state-metrics/README.md
+index 94ad049..6c7f364 100644
+--- a/stable/kube-state-metrics/README.md
++++ b/stable/kube-state-metrics/README.md
+@@ -12,45 +12,57 @@ $ helm install stable/kube-state-metrics
+ 
+ ## Configuration
+ 
+-| Parameter                             | Description                                             | Default                                     |
+-|---------------------------------------|---------------------------------------------------------|---------------------------------------------|
+-| `image.repository`                    | The image repository to pull from                       | k8s.gcr.io/kube-state-metrics               |
+-| `image.tag`                           | The image tag to pull from                              | `v1.5.0`                                    |
+-| `image.pullPolicy`                    | Image pull policy                                       | IfNotPresent                                |
+-| `replicas`                            | Number of replicas                                      | 1                                           |
+-| `service.port`                        | The port of the container                               | 8080                                        |
+-| `prometheusScrape`                    | Whether or not enable prom scrape                       | true                                        |
+-| `rbac.create`                         | If true, create & use RBAC resources                    | true                                        |
+-| `serviceAccount.create`               | If true, and rbac true, create & use serviceAccount     | true                                        |
+-| `serviceAccount.name`                 | If not set & create is true, use template fullname      |                                             |
+-| `serviceAccount.imagePullSecrets`     | Specify image pull secrets field                        | `[]`                                        |
+-| `podSecurityPolicy.enabled`           | If true, create & use PodSecurityPolicy resources       | false                                       |
+-| `podSecurityPolicy.annotations`       | Specify pod annotations in the pod security policy      | {}                                          |
+-| `securityContext.enabled`             | Enable security context                                 | `true`                                      |
+-| `securityContext.fsGroup`             | Group ID for the container                              | `65534`                                     |
+-| `securityContext.runAsUser`           | User ID for the container                               | `65534`                                     |
+-| `priorityClassName`                   | Name of Priority Class to assign pods                   | `nil`                                       |
+-| `nodeSelector`                        | Node labels for pod assignment                          | {}                                          |
+-| `tolerations`                         | Tolerations for pod assignment	                      | []                                          |
+-| `podAnnotations`                      | Annotations to be added to the pod                      | {}                                          |
+-| `resources`                           | kube-state-metrics resource requests and limits         | {}                                          |
+-| `collectors.configmaps`               | Enable the configmaps collector.                        | true                                        |
+-| `collectors.cronjobs`                 | Enable the cronjobs collector.                          | true                                        |
+-| `collectors.daemonsets`               | Enable the daemonsets collector.                        | true                                        |
+-| `collectors.deployments`              | Enable the deployments collector.                       | true                                        |
+-| `collectors.endpoints`                | Enable the endpoints collector.                         | true                                        |
+-| `collectors.horizontalpodautoscalers` | Enable the horizontalpodautoscalers collector.          | true                                        |
+-| `collectors.jobs`                     | Enable the jobs collector.                              | true                                        |
+-| `collectors.limitranges`              | Enable the limitranges collector.                       | true                                        |
+-| `collectors.namespaces`               | Enable the namespaces collector.                        | true                                        |
+-| `collectors.nodes`                    | Enable the nodes collector.                             | true                                        |
+-| `collectors.persistentvolumeclaims`   | Enable the persistentvolumeclaims collector.            | true                                        |
+-| `collectors.persistentvolumes`        | Enable the persistentvolumes collector.                 | true                                        |
+-| `collectors.poddisruptionbudgets`     | Enable the poddisruptionbudgets collector.              | true                                        |
+-| `collectors.pods`                     | Enable the pods collector.                              | true                                        |
+-| `collectors.replicasets`              | Enable the replicasets collector.                       | true                                        |
+-| `collectors.replicationcontrollers`   | Enable the replicationcontrollers collector.            | true                                        |
+-| `collectors.resourcequotas`           | Enable the resourcequotas collector.                    | true                                        |
+-| `collectors.secrets`                  | Enable the secrets collector.                           | true                                        |
+-| `collectors.services`                 | Enable the services collector.                          | true                                        |
+-| `collectors.statefulsets`             | Enable the statefulsets collector.                      | true                                        |
++| Parameter                               | Description                                                                           | Default                                    |
++|:----------------------------------------|:--------------------------------------------------------------------------------------|:-------------------------------------------|
++| `image.repository`                      | The image repository to pull from                                                     | quay.io/coreos/kube-state-metrics          |
++| `image.tag`                             | The image tag to pull from                                                            | `v1.8.0`                                   |
++| `image.pullPolicy`                      | Image pull policy                                                                     | `IfNotPresent`                             |
++| `replicas`                              | Number of replicas                                                                    | `1`                                        |
++| `service.port`                          | The port of the container                                                             | `8080`                                     |
++| `service.annotations`                   | Annotations to be added to the service                                                | `{}`
++| `customLabels`                          | Custom labels to apply to service, deployment and pods                                | `{}`                                       |
++| `hostNetwork`                           | Whether or not to use the host network                                                | `false`                                    |
++| `prometheusScrape`                      | Whether or not enable prom scrape                                                     | `true`                                     |
++| `rbac.create`                           | If true, create & use RBAC resources                                                  | `true`                                     |
++| `serviceAccount.create`                 | If true, create & use serviceAccount                                                  | `true`                                     |
++| `serviceAccount.name`                   | If not set & create is true, use template fullname                                    |                                            |
++| `serviceAccount.imagePullSecrets`       | Specify image pull secrets field                                                      | `[]`                                       |
++| `podSecurityPolicy.enabled`             | If true, create & use PodSecurityPolicy resources                                     | `false`                                    |
++| `podSecurityPolicy.annotations`         | Specify pod annotations in the pod security policy                                    | {}                                         |
++| `securityContext.enabled`               | Enable security context                                                               | `true`                                     |
++| `securityContext.fsGroup`               | Group ID for the container                                                            | `65534`                                    |
++| `securityContext.runAsUser`             | User ID for the container                                                             | `65534`                                    |
++| `priorityClassName`                     | Name of Priority Class to assign pods                                                 | `nil`                                      |
++| `nodeSelector`                          | Node labels for pod assignment                                                        | {}                                         |
++| `affinity`                              | Affinity settings for pod assignment                                                  | {}                                         |
++| `tolerations`                           | Tolerations for pod assignment                                                        | []                                         |
++| `podAnnotations`                        | Annotations to be added to the pod                                                    | {}                                         |
++| `resources`                             | kube-state-metrics resource requests and limits                                       | {}                                         |
++| `collectors.certificatesigningrequests` | Enable the certificatesigningrequests collector.                                      | `true`                                     |
++| `collectors.configmaps`                 | Enable the configmaps collector.                                                      | `true`                                     |
++| `collectors.cronjobs`                   | Enable the cronjobs collector.                                                        | `true`                                     |
++| `collectors.daemonsets`                 | Enable the daemonsets collector.                                                      | `true`                                     |
++| `collectors.deployments`                | Enable the deployments collector.                                                     | `true`                                     |
++| `collectors.endpoints`                  | Enable the endpoints collector.                                                       | `true`                                     |
++| `collectors.horizontalpodautoscalers`   | Enable the horizontalpodautoscalers collector.                                        | `true`                                     |
++| `collectors.ingresses`                  | Enable the ingresses collector.                                                       | `true`                                     |
++| `collectors.jobs`                       | Enable the jobs collector.                                                            | `true`                                     |
++| `collectors.limitranges`                | Enable the limitranges collector.                                                     | `true`                                     |
++| `collectors.namespaces`                 | Enable the namespaces collector.                                                      | `true`                                     |
++| `collectors.nodes`                      | Enable the nodes collector.                                                           | `true`                                     |
++| `collectors.persistentvolumeclaims`     | Enable the persistentvolumeclaims collector.                                          | `true`                                     |
++| `collectors.persistentvolumes`          | Enable the persistentvolumes collector.                                               | `true`                                     |
++| `collectors.poddisruptionbudgets`       | Enable the poddisruptionbudgets collector.                                            | `true`                                     |
++| `collectors.pods`                       | Enable the pods collector.                                                            | `true`                                     |
++| `collectors.replicasets`                | Enable the replicasets collector.                                                     | `true`                                     |
++| `collectors.replicationcontrollers`     | Enable the replicationcontrollers collector.                                          | `true`                                     |
++| `collectors.resourcequotas`             | Enable the resourcequotas collector.                                                  | `true`                                     |
++| `collectors.secrets`                    | Enable the secrets collector.                                                         | `true`                                     |
++| `collectors.services`                   | Enable the services collector.                                                        | `true`                                     |
++| `collectors.statefulsets`               | Enable the statefulsets collector.                                                    | `true`                                     |
++| `collectors.storageclasses`             | Enable the storageclasses collector.                                                  | `true`                                     | 
++| `collectors.verticalpodautoscalers`     | Enable the verticalpodautoscalers collector.                                          | `false`                                    | 
++| `prometheus.monitor.enabled`            | Set this to `true` to create ServiceMonitor for Prometheus operator                   | `false`                                    |
++| `prometheus.monitor.additionalLabels`   | Additional labels that can be used so ServiceMonitor will be discovered by Prometheus | `{}`                                       |
++| `prometheus.monitor.namespace`          | Namespace where servicemonitor resource should be created                             | `the same namespace as kube-state-metrics` |
++| `prometheus.monitor.honorLabels`        | Honor metric labels                                                                   | `false`                                    |
+diff --git a/stable/kube-state-metrics/templates/NOTES.txt b/stable/kube-state-metrics/templates/NOTES.txt
+index 8e8d9fe..d804011 100644
+--- a/stable/kube-state-metrics/templates/NOTES.txt
++++ b/stable/kube-state-metrics/templates/NOTES.txt
+@@ -1,6 +1,6 @@
+ kube-state-metrics is a simple service that listens to the Kubernetes API server and generates metrics about the state of the objects.
+ The exposed metrics can be found here:
+-https://github.com/kubernetes/kube-state-metrics/tree/master/Documentation#documentation.
++https://github.com/kubernetes/kube-state-metrics/blob/master/docs/README.md#exposed-metrics
+ 
+ The metrics are exported on the HTTP endpoint /metrics on the listening port.
+ In your case, {{ template "kube-state-metrics.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/metrics
+diff --git a/stable/kube-state-metrics/templates/clusterrole.yaml b/stable/kube-state-metrics/templates/clusterrole.yaml
+index 803b73b..4f68a1f 100644
+--- a/stable/kube-state-metrics/templates/clusterrole.yaml
++++ b/stable/kube-state-metrics/templates/clusterrole.yaml
+@@ -3,12 +3,18 @@ apiVersion: rbac.authorization.k8s.io/v1beta1
+ kind: ClusterRole
+ metadata:
+   labels:
+-    app: {{ template "kube-state-metrics.name" . }}
+-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+-    heritage: {{ .Release.Service }}
+-    release: {{ .Release.Name }}
++    app.kubernetes.io/name: {{ template "kube-state-metrics.name" . }}
++    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
++    app.kubernetes.io/managed-by: {{ .Release.Service }}
++    app.kubernetes.io/instance: {{ .Release.Name }}
+   name: {{ template "kube-state-metrics.fullname" . }}
+ rules:
++{{ if .Values.collectors.certificatesigningrequests }}
++- apiGroups: ["certificates.k8s.io"]
++  resources:
++  - certificatesigningrequests
++  verbs: ["list", "watch"]
++{{ end -}}
+ {{ if .Values.collectors.configmaps }}
+ - apiGroups: [""]
+   resources:
+@@ -22,13 +28,13 @@ rules:
+   verbs: ["list", "watch"]
+ {{ end -}}
+ {{ if .Values.collectors.daemonsets }}
+-- apiGroups: ["extensions"]
++- apiGroups: ["extensions", "apps"]
+   resources:
+   - daemonsets
+   verbs: ["list", "watch"]
+ {{ end -}}
+ {{ if .Values.collectors.deployments }}
+-- apiGroups: ["extensions"]
++- apiGroups: ["extensions", "apps"]
+   resources:
+   - deployments
+   verbs: ["list", "watch"]
+@@ -45,6 +51,12 @@ rules:
+   - horizontalpodautoscalers
+   verbs: ["list", "watch"]
+ {{ end -}}
++{{ if .Values.collectors.ingresses }}
++- apiGroups: ["extensions", "networking.k8s.io"]
++  resources:
++  - ingresses
++  verbs: ["list", "watch"]
++{{ end -}}
+ {{ if .Values.collectors.jobs }}
+ - apiGroups: ["batch"]
+   resources:
+@@ -94,7 +106,7 @@ rules:
+   verbs: ["list", "watch"]
+ {{ end -}}
+ {{ if .Values.collectors.replicasets }}
+-- apiGroups: ["extensions"]
++- apiGroups: ["extensions", "apps"]
+   resources:
+   - replicasets
+   verbs: ["list", "watch"]
+@@ -129,4 +141,16 @@ rules:
+   - statefulsets
+   verbs: ["list", "watch"]
+ {{ end -}}
++{{ if .Values.collectors.storageclasses }}
++- apiGroups: ["storage.k8s.io"]
++  resources:
++    - storageclasses
++  verbs: ["list", "watch"]
++{{ end -}}
++{{ if .Values.collectors.verticalpodautoscalers }}
++- apiGroups: ["autoscaling.k8s.io"]
++  resources:
++    - verticalpodautoscalers
++  verbs: ["list", "watch"]
++{{ end -}}
+ {{- end -}}
+diff --git a/stable/kube-state-metrics/templates/clusterrolebinding.yaml b/stable/kube-state-metrics/templates/clusterrolebinding.yaml
+index e57b051..b4586fb 100644
+--- a/stable/kube-state-metrics/templates/clusterrolebinding.yaml
++++ b/stable/kube-state-metrics/templates/clusterrolebinding.yaml
+@@ -3,10 +3,10 @@ apiVersion: rbac.authorization.k8s.io/v1beta1
+ kind: ClusterRoleBinding
+ metadata:
+   labels:
+-    app: {{ template "kube-state-metrics.name" . }}
+-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+-    heritage: {{ .Release.Service }}
+-    release: {{ .Release.Name }}
++    app.kubernetes.io/name: {{ template "kube-state-metrics.name" . }}
++    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
++    app.kubernetes.io/managed-by: {{ .Release.Service }}
++    app.kubernetes.io/instance: {{ .Release.Name }}
+   name: {{ template "kube-state-metrics.fullname" . }}
+ roleRef:
+   apiGroup: rbac.authorization.k8s.io
+diff --git a/stable/kube-state-metrics/templates/deployment.yaml b/stable/kube-state-metrics/templates/deployment.yaml
+index ce02f8e..492df24 100644
+--- a/stable/kube-state-metrics/templates/deployment.yaml
++++ b/stable/kube-state-metrics/templates/deployment.yaml
+@@ -3,28 +3,33 @@ kind: Deployment
+ metadata:
+   name: {{ template "kube-state-metrics.fullname" . }}
+   labels:
+-    app: {{ template "kube-state-metrics.name" . }}
+-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+-    release: "{{ .Release.Name }}"
+-    heritage: "{{ .Release.Service }}"
++    app.kubernetes.io/name: {{ template "kube-state-metrics.name" . }}
++    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
++    app.kubernetes.io/instance: "{{ .Release.Name }}"
++    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
++{{- if .Values.customLabels }}
++{{ toYaml .Values.customLabels | indent 4 }}
++{{- end }}
+ spec:
+   selector:
+     matchLabels:
+-      app: {{ template "kube-state-metrics.name" . }}
++      app.kubernetes.io/name: {{ template "kube-state-metrics.name" . }}
+   replicas: {{ .Values.replicas }}
+   template:
+     metadata:
+       labels:
+-        app: {{ template "kube-state-metrics.name" . }}
+-        release: "{{ .Release.Name }}"
++        app.kubernetes.io/name: {{ template "kube-state-metrics.name" . }}
++        app.kubernetes.io/instance: "{{ .Release.Name }}"
++{{- if .Values.customLabels }}
++{{ toYaml .Values.customLabels | indent 8 }}
++{{- end }}
+ {{- if .Values.podAnnotations }}
+       annotations:
+ {{ toYaml .Values.podAnnotations | indent 8 }}
+ {{- end }}
+     spec:
+-{{ if .Values.rbac.create }}
++      hostNetwork: {{ .Values.hostNetwork }}
+       serviceAccountName: {{ template "kube-state-metrics.serviceAccountName" . }}
+-{{ end }}
+       {{- if .Values.securityContext.enabled }}
+       securityContext:
+         fsGroup: {{ .Values.securityContext.fsGroup }}
+@@ -36,6 +41,9 @@ spec:
+       containers:
+       - name: {{ .Chart.Name }}
+         args:
++{{  if .Values.collectors.certificatesigningrequests  }}
++        - --collectors=certificatesigningrequests
++{{  end  }}
+ {{  if .Values.collectors.configmaps  }}
+         - --collectors=configmaps
+ {{  end  }}
+@@ -54,6 +62,9 @@ spec:
+ {{  if .Values.collectors.horizontalpodautoscalers  }}
+         - --collectors=horizontalpodautoscalers
+ {{  end  }}
++{{  if .Values.collectors.ingresses  }}
++        - --collectors=ingresses
++{{  end  }}
+ {{  if .Values.collectors.jobs  }}
+         - --collectors=jobs
+ {{  end  }}
+@@ -96,6 +107,12 @@ spec:
+ {{  if .Values.collectors.statefulsets  }}
+         - --collectors=statefulsets
+ {{  end  }}
++{{  if .Values.collectors.storageclasses  }}
++        - --collectors=storageclasses
++{{  end  }}
++{{  if .Values.collectors.verticalpodautoscalers  }}
++        - --collectors=verticalpodautoscalers
++{{  end  }}
+ {{ if .Values.namespace }}
+         - --namespace={{ .Values.namespace }}
+ {{ end }}
+@@ -103,14 +120,26 @@ spec:
+         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+         ports:
+         - containerPort: 8080
+-        readinessProbe:
++        livenessProbe:
+           httpGet:
+             path: /healthz
+             port: 8080
+           initialDelaySeconds: 5
+           timeoutSeconds: 5
++        readinessProbe:
++          httpGet:
++            path: /
++            port: 8080
++          initialDelaySeconds: 5
++          timeoutSeconds: 5
++{{- if .Values.resources }}
+         resources:
+-{{ toYaml .Values.resources | indent 12 }}
++{{ toYaml .Values.resources | indent 10 }}
++{{- end }}
++{{- if .Values.affinity }}
++      affinity:
++{{ toYaml .Values.affinity | indent 8 }}
++{{- end }}
+ {{- if .Values.nodeSelector }}
+       nodeSelector:
+ {{ toYaml .Values.nodeSelector | indent 8 }}
+@@ -119,4 +148,3 @@ spec:
+       tolerations:
+ {{ toYaml .Values.tolerations | indent 8 }}
+ {{- end }}
+-
+diff --git a/stable/kube-state-metrics/templates/podsecuritypolicy.yaml b/stable/kube-state-metrics/templates/podsecuritypolicy.yaml
+index 4ca46ac..aeff117 100644
+--- a/stable/kube-state-metrics/templates/podsecuritypolicy.yaml
++++ b/stable/kube-state-metrics/templates/podsecuritypolicy.yaml
+@@ -4,12 +4,12 @@ kind: PodSecurityPolicy
+ metadata:
+   name: {{ template "kube-state-metrics.fullname" . }}
+   labels:
+-    app: {{ template "kube-state-metrics.name" . }}
+-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+-    heritage: {{ .Release.Service }}
+-    release: {{ .Release.Name }}
+-  annotations:
++    app.kubernetes.io/name: {{ template "kube-state-metrics.name" . }}
++    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
++    app.kubernetes.io/managed-by: {{ .Release.Service }}
++    app.kubernetes.io/instance: {{ .Release.Name }}
+ {{- if .Values.podSecurityPolicy.annotations }}
++  annotations:
+ {{ toYaml .Values.podSecurityPolicy.annotations | indent 4 }}
+ {{- end }}
+ spec:
+diff --git a/stable/kube-state-metrics/templates/psp-clusterrole.yaml b/stable/kube-state-metrics/templates/psp-clusterrole.yaml
+index c43f90d..dcd65e1 100644
+--- a/stable/kube-state-metrics/templates/psp-clusterrole.yaml
++++ b/stable/kube-state-metrics/templates/psp-clusterrole.yaml
+@@ -3,10 +3,10 @@ apiVersion: rbac.authorization.k8s.io/v1
+ kind: ClusterRole
+ metadata:
+   labels:
+-    app: {{ template "kube-state-metrics.name" . }}
+-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+-    heritage: {{ .Release.Service }}
+-    release: {{ .Release.Name }}
++    app.kubernetes.io/name: {{ template "kube-state-metrics.name" . }}
++    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
++    app.kubernetes.io/managed-by: {{ .Release.Service }}
++    app.kubernetes.io/instance: {{ .Release.Name }}
+   name: psp-{{ template "kube-state-metrics.fullname" . }}
+ rules:
+ - apiGroups: ['extensions']
+diff --git a/stable/kube-state-metrics/templates/psp-clusterrolebinding.yaml b/stable/kube-state-metrics/templates/psp-clusterrolebinding.yaml
+index bfca12c..7418618 100644
+--- a/stable/kube-state-metrics/templates/psp-clusterrolebinding.yaml
++++ b/stable/kube-state-metrics/templates/psp-clusterrolebinding.yaml
+@@ -3,10 +3,10 @@ apiVersion: rbac.authorization.k8s.io/v1
+ kind: ClusterRoleBinding
+ metadata:
+   labels:
+-    app: {{ template "kube-state-metrics.name" . }}
+-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+-    heritage: {{ .Release.Service }}
+-    release: {{ .Release.Name }}
++    app.kubernetes.io/name: {{ template "kube-state-metrics.name" . }}
++    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
++    app.kubernetes.io/managed-by: {{ .Release.Service }}
++    app.kubernetes.io/instance: {{ .Release.Name }}
+   name: psp-{{ template "kube-state-metrics.fullname" . }}
+ roleRef:
+   apiGroup: rbac.authorization.k8s.io
+diff --git a/stable/kube-state-metrics/templates/service.yaml b/stable/kube-state-metrics/templates/service.yaml
+index b6daacd..a880bf9 100644
+--- a/stable/kube-state-metrics/templates/service.yaml
++++ b/stable/kube-state-metrics/templates/service.yaml
+@@ -3,14 +3,20 @@ kind: Service
+ metadata:
+   name: {{ template "kube-state-metrics.fullname" . }}
+   labels:
+-    app: {{ template "kube-state-metrics.name" . }}
+-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+-    release: "{{ .Release.Name }}"
+-    heritage: "{{ .Release.Service }}"
+-  {{- if .Values.prometheusScrape }}
++    app.kubernetes.io/name: {{ template "kube-state-metrics.name" . }}
++    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
++    app.kubernetes.io/instance: "{{ .Release.Name }}"
++    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
++{{- if .Values.customLabels }}
++{{ toYaml .Values.customLabels | indent 4 }}
++{{- end }}
+   annotations:
++    {{- if .Values.prometheusScrape }}
+     prometheus.io/scrape: '{{ .Values.prometheusScrape }}'
+-  {{- end }}
++    {{- end }}
++    {{- if .Values.service.annotations }}
++    {{- toYaml .Values.service.annotations | nindent 4 }}
++    {{- end }}
+ spec:
+   type: "{{ .Values.service.type }}"
+   ports:
+@@ -25,5 +31,5 @@ spec:
+   loadBalancerIP: "{{ .Values.service.loadBalancerIP }}"
+ {{- end }}
+   selector:
+-    app: {{ template "kube-state-metrics.name" . }}
+-    release: {{ .Release.Name }}
++    app.kubernetes.io/name: {{ template "kube-state-metrics.name" . }}
++    app.kubernetes.io/instance: {{ .Release.Name }}
+diff --git a/stable/kube-state-metrics/templates/serviceaccount.yaml b/stable/kube-state-metrics/templates/serviceaccount.yaml
+index edac3b9..e2bf7c0 100644
+--- a/stable/kube-state-metrics/templates/serviceaccount.yaml
++++ b/stable/kube-state-metrics/templates/serviceaccount.yaml
+@@ -1,15 +1,13 @@
+-{{- if .Values.rbac.create -}}
+ {{- if .Values.serviceAccount.create -}}
+ apiVersion: v1
+ kind: ServiceAccount
+ metadata:
+   labels:
+-    app: {{ template "kube-state-metrics.name" . }}
+-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+-    heritage: {{ .Release.Service }}
+-    release: {{ .Release.Name }}
++    app.kubernetes.io/name: {{ template "kube-state-metrics.name" . }}
++    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
++    app.kubernetes.io/managed-by: {{ .Release.Service }}
++    app.kubernetes.io/instance: {{ .Release.Name }}
+   name: {{ template "kube-state-metrics.fullname" . }}
+ imagePullSecrets:
+ {{ toYaml .Values.serviceAccount.imagePullSecrets | indent 2 }}
+ {{- end -}}
+-{{- end -}}
+diff --git a/stable/kube-state-metrics/templates/servicemonitor.yaml b/stable/kube-state-metrics/templates/servicemonitor.yaml
+new file mode 100644
+index 0000000..6405bd4
+--- /dev/null
++++ b/stable/kube-state-metrics/templates/servicemonitor.yaml
+@@ -0,0 +1,24 @@
++{{- if .Values.prometheus.monitor.enabled }}
++apiVersion: monitoring.coreos.com/v1
++kind: ServiceMonitor
++metadata:
++  name: {{ template "kube-state-metrics.fullname" . }}
++  labels:
++    app.kubernetes.io/name: {{ template "kube-state-metrics.name" . }}
++    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
++    app.kubernetes.io/instance: "{{ .Release.Name }}"
++    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
++    {{- if .Values.prometheus.monitor.additionalLabels }}
++{{ toYaml .Values.prometheus.monitor.additionalLabels | indent 4 }}
++    {{- end }}
++spec:
++  selector:
++    matchLabels:
++      app.kubernetes.io/name: {{ template "kube-state-metrics.name" . }}
++      app.kubernetes.io/instance: {{ .Release.Name }}
++  endpoints:
++    - port: http
++      {{- if .Values.prometheus.monitor.honorLabels }}
++      honorLabels: true
++      {{- end }}
++{{- end }}
+diff --git a/stable/kube-state-metrics/values.yaml b/stable/kube-state-metrics/values.yaml
+index 86aab9b..2bf5b30 100644
+--- a/stable/kube-state-metrics/values.yaml
++++ b/stable/kube-state-metrics/values.yaml
+@@ -1,8 +1,8 @@
+ # Default values for kube-state-metrics.
+ prometheusScrape: true
+ image:
+-  repository: k8s.gcr.io/kube-state-metrics
+-  tag: v1.5.0
++  repository: quay.io/coreos/kube-state-metrics
++  tag: v1.8.0
+   pullPolicy: IfNotPresent
+ 
+ replicas: 1
+@@ -13,6 +13,11 @@ service:
+   type: ClusterIP
+   nodePort: 0
+   loadBalancerIP: ""
++  annotations: {}
++
++customLabels: {}
++
++hostNetwork: false
+ 
+ rbac:
+   # If true, create & use RBAC resources
+@@ -28,6 +33,13 @@ serviceAccount:
+   # ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+   imagePullSecrets: []
+ 
++prometheus:
++  monitor:
++    enabled: false
++    additionalLabels: {}
++    namespace: ""
++    honorLabels: false
++
+ ## Specify if a Pod Security Policy for kube-state-metrics must be created
+ ## Ref: https://kubernetes.io/docs/concepts/policy/pod-security-policy/
+ ##
+@@ -53,6 +65,10 @@ securityContext:
+ ## Ref: https://kubernetes.io/docs/user-guide/node-selection/
+ nodeSelector: {}
+ 
++## Affinity settings for pod assignment
++## Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
++affinity: {}
++
+ ## Tolerations for pod assignment
+ ## Ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
+ tolerations: []
+@@ -66,12 +82,14 @@ podAnnotations: {}
+ # Available collectors for kube-state-metrics. By default all available
+ # collectors are enabled.
+ collectors:
++  certificatesigningrequests: true
+   configmaps: true
+   cronjobs: true
+   daemonsets: true
+   deployments: true
+   endpoints: true
+   horizontalpodautoscalers: true
++  ingresses: true
+   jobs: true
+   limitranges: true
+   namespaces: true
+@@ -86,6 +104,8 @@ collectors:
+   secrets: true
+   services: true
+   statefulsets: true
++  storageclasses: true
++  verticalpodautoscalers: false
+ 
+ # Namespace to be enabled for collecting resources. By default all namespaces are collected.
+ # namespace: ""
+-- 
+1.8.3.1
+
