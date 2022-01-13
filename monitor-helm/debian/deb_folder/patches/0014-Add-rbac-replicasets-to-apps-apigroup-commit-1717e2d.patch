@@ -1,0 +1,24 @@
+From 6bed0291665738b2b1f9cdceff3eaaec46c9409f Mon Sep 17 00:00:00 2001
+From: Abdelfattah Saafan <abdelfattah.saafan@windriver.com>
+Date: Wed, 22 Jan 2020 11:19:39 -0500
+Subject: [PATCH 1/1] add rbac replicasets to apps
+
+---
+ stable/metricbeat/templates/clusterrole.yaml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/stable/metricbeat/templates/clusterrole.yaml b/stable/metricbeat/templates/clusterrole.yaml
+index 5ca886c..bd028fc 100644
+--- a/stable/metricbeat/templates/clusterrole.yaml
++++ b/stable/metricbeat/templates/clusterrole.yaml
+@@ -30,6 +30,7 @@ rules:
+   resources:
+   - statefulsets
+   - deployments
++  - replicasets
+   verbs: ["get", "list", "watch"]
+ - apiGroups: [""]
+   resources:
+-- 
+1.8.3.1
+

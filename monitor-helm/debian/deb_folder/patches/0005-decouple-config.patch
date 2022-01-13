@@ -1,0 +1,97 @@
+From ac9bce2e01870d8623dc7910cd68079d56f917ca Mon Sep 17 00:00:00 2001
+From: Kevin Smith <kevin.smith@windriver.com>
+Date: Wed, 11 Sep 2019 18:07:50 -0400
+Subject: [PATCH 1/1] decouple config
+
+---
+ stable/elasticsearch/templates/configmap.yaml | 8 ++++++++
+ stable/elasticsearch/values.yaml              | 1 +
+ stable/filebeat/templates/configmap.yaml      | 2 +-
+ stable/metricbeat/templates/configmap.yaml    | 2 +-
+ stable/metricbeat/values.yaml                 | 6 ++++--
+ 5 files changed, 15 insertions(+), 4 deletions(-)
+
+diff --git a/stable/elasticsearch/templates/configmap.yaml b/stable/elasticsearch/templates/configmap.yaml
+index 977ee9a..6bc2065 100644
+--- a/stable/elasticsearch/templates/configmap.yaml
++++ b/stable/elasticsearch/templates/configmap.yaml
+@@ -87,6 +87,14 @@ data:
+     gateway.recover_after_time: ${RECOVER_AFTER_TIME:5m}
+     gateway.recover_after_master_nodes: ${RECOVER_AFTER_MASTER_NODES:2}
+     gateway.recover_after_data_nodes: ${RECOVER_AFTER_DATA_NODES:1}
++
++{{- if .Values.cluster.auto_config_initial_masters }}
++    cluster.initial_master_nodes:
++    {{- range $i := until (.Values.master.replicas|int) }}
++    - {{template "elasticsearch.master.fullname" $ }}-{{ $i }}
++    {{- end }}
++{{- end }}
++
+ {{- with .Values.cluster.config }}
+ {{ toYaml . | indent 4 }}
+ {{- end }}
+diff --git a/stable/elasticsearch/values.yaml b/stable/elasticsearch/values.yaml
+index 6dcd9b0..37321dc 100644
+--- a/stable/elasticsearch/values.yaml
++++ b/stable/elasticsearch/values.yaml
+@@ -70,6 +70,7 @@ cluster:
+   plugins: []
+     # - ingest-attachment
+     # - mapper-size
++  auto_config_initial_masters: true
+ 
+ client:
+   name: client
+diff --git a/stable/filebeat/templates/configmap.yaml b/stable/filebeat/templates/configmap.yaml
+index 9433176..8377e5a 100644
+--- a/stable/filebeat/templates/configmap.yaml
++++ b/stable/filebeat/templates/configmap.yaml
+@@ -22,7 +22,7 @@ data:
+ 
+     # Check if this is a map of entries.  If so, we'll only export the template
+     # to the first address
+-    if [[ ${ADDR:0:1} == [ ]]; then
++    if [ ${ADDR: 0:1} == [ ] && [ ${ADDR: -1} == ] ]; then
+        # Remove the square brackets
+        ADDR=${ADDR:1:-1}
+        # Take the first entry in case there are more than one
+diff --git a/stable/metricbeat/templates/configmap.yaml b/stable/metricbeat/templates/configmap.yaml
+index f990f0c..4249e7f 100644
+--- a/stable/metricbeat/templates/configmap.yaml
++++ b/stable/metricbeat/templates/configmap.yaml
+@@ -22,7 +22,7 @@ data:
+ 
+     # Check if this is a map of entries.  If so, we'll only export the template
+     # to the first address
+-    if [[ ${ADDR:0:1} == [ ]]; then
++    if [ ${ADDR: 0:1} == [ ] && [ ${ADDR: -1} == ] ]; then
+        # Remove the square brackets
+        ADDR=${ADDR:1:-1}
+        # Take the first entry in case there are more than one
+diff --git a/stable/metricbeat/values.yaml b/stable/metricbeat/values.yaml
+index 2908a1b..c8f758c 100644
+--- a/stable/metricbeat/values.yaml
++++ b/stable/metricbeat/values.yaml
+@@ -113,7 +113,7 @@ deployment:
+             # Uncomment this to get k8s events:
+             # - event
+           period: 10s
+-          hosts: ["kube-state-metrics:8080"]
++          hosts: ["${KUBE_STATE_METRICS_HOST}:8080"]
+   # If overrideModules is not empty, metricbeat chart's default modules won't be used at all.
+   overrideModules: {}
+ 
+@@ -122,7 +122,9 @@ plugins: []
+   # - kinesis.so
+ 
+ # additional environment
+-# extraEnv:
++extraEnv:
++  - name: KUBE_STATE_METRICS_HOST
++    value: "mon-kube-state-metrics"
+ #  - name: test1
+ #    value: "test1"
+ #  - name: test2
+-- 
+1.8.3.1
+

@@ -1,0 +1,317 @@
+From 4f42518e2e15a65e340e15029c50b53b20e119e9 Mon Sep 17 00:00:00 2001
+From: Kevin Smith <kevin.smith@windriver.com>
+Date: Sat, 14 Sep 2019 12:10:44 -0400
+Subject: [PATCH 1/1] add system info
+
+---
+ stable/filebeat/templates/configmap.yaml    | 22 ++++++++++++++---
+ stable/filebeat/templates/daemonset.yaml    | 36 ++++++++++++++++++++++++++++
+ stable/filebeat/values.yaml                 |  4 ++++
+ stable/logstash/templates/statefulset.yaml  | 10 ++++++++
+ stable/logstash/values.yaml                 |  3 +++
+ stable/metricbeat/templates/configmap.yaml  | 22 ++++++++++++++---
+ stable/metricbeat/templates/daemonset.yaml  | 37 ++++++++++++++++++++++++++++-
+ stable/metricbeat/templates/deployment.yaml | 18 ++++++++++++++
+ stable/metricbeat/values.yaml               |  4 ++++
+ 9 files changed, 149 insertions(+), 7 deletions(-)
+
+diff --git a/stable/filebeat/templates/configmap.yaml b/stable/filebeat/templates/configmap.yaml
+index 8377e5a..c08a4bc 100644
+--- a/stable/filebeat/templates/configmap.yaml
++++ b/stable/filebeat/templates/configmap.yaml
+@@ -18,7 +18,9 @@ data:
+     BEAT_VER=$($BEAT version | awk '{print $3}')
+ 
+     ADDR=$OUTPUT_ELASTICSEARCH_HOSTS
+-    echo $ADDR
++    ESPATH=$OUTPUT_ELASTICSEARCH_PATH
++
++    echo $ADDR$ESPATH
+ 
+     # Check if this is a map of entries.  If so, we'll only export the template
+     # to the first address
+@@ -28,7 +30,7 @@ data:
+        # Take the first entry in case there are more than one
+        ADDR=${ADDR%%,*}
+     fi
+-    echo $ADDR
++    echo $ADDR$ESPATH
+ 
+     # Check if user has formatted with http:// on front, if not we need to add
+     HTTP='http://'
+@@ -53,7 +55,21 @@ data:
+        # remove the lifecycle section of the yaml, as elasticsearch will choke
+        # on it as oss version does not support ilm.
+        sed -i '/lifecycle/,+3d' /tmp/beat.template.json
+-       curl -v $CURL_G -XPUT -H "Content-Type: application/json" $HTTP$ADDR/_template/$BEAT-$BEAT_VER -d@/tmp/beat.template.json
++
++       # "unset" is the special system name when none has been set through
++       # overrides..  We key on that to know what template name and index pattern to set
++       if [[ $SYSTEM_NAME_FOR_INDEX != unset ]]; then
++          # replace the standard index pattern with one including our system name,
++          # which will match our created indices
++          sed -i "s/$BEAT-$BEAT_VER/$BEAT-$BEAT_VER$SYSTEM_NAME_FOR_INDEX/g" /tmp/beat.template.json
++          # give the template a name with the system name appended.
++          curl -v $CURL_G -XPUT -H "Content-Type: application/json" $HTTP$ADDR$ESPATH/_template/$BEAT-$BEAT_VER$SYSTEM_NAME_FOR_INDEX -d@/tmp/beat.template.json
++       else
++          # apply a higher order to this template in case there are templates with system names
++          # which should be applied first
++          sed -i "s/\"order\": 1/\"order\": 2/g" /tmp/beat.template.json
++          curl -v $CURL_G -XPUT -H "Content-Type: application/json" $HTTP$ADDR$ESPATH/_template/$BEAT-$BEAT_VER -d@/tmp/beat.template.json
++       fi
+     else
+        echo "logstash not configured, not exporting template, should be done for us."
+     fi
+diff --git a/stable/filebeat/templates/daemonset.yaml b/stable/filebeat/templates/daemonset.yaml
+index b8536fb..b1833a9 100644
+--- a/stable/filebeat/templates/daemonset.yaml
++++ b/stable/filebeat/templates/daemonset.yaml
+@@ -64,6 +64,24 @@ spec:
+       {{- end }}
+       {{- end }}
+       {{- end }}
++      ## make system name and index parms visible
++      {{- if .Values.systemNameForIndex}}
++      {{  $systemNameNoSpecial := regexReplaceAll "[^A-Za-z0-9-]+" .Values.systemNameForIndex "" }}
++      {{  $systemNameFormatted := $systemNameNoSpecial | lower | trunc 200 }}
++        - name: SYSTEM_NAME_FOR_INDEX
++          value: {{ printf "-%s" $systemNameFormatted | quote }}
++        - name: INDEX_PATTERN
++          value: "{{ .Values.indexNamePrefix }}-{{$systemNameFormatted}}-*"
++        - name: INDEX_NAME
++          value: "{{ .Values.indexNamePrefix }}-{{$systemNameFormatted}}"
++      {{- else }}
++        - name: SYSTEM_NAME_FOR_INDEX
++          value: "unset"
++        - name: INDEX_PATTERN
++          value: "{{ .Values.indexNamePrefix }}-*"
++        - name: INDEX_NAME
++          value: "{{ .Values.indexNamePrefix }}"
++      {{- end }}
+ {{- if .Values.indexTemplateLoad }}
+       - name: "load-es-template"
+         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+@@ -116,6 +134,24 @@ spec:
+       {{- end }}
+       {{- end }}
+       {{- end }}
++      ## make system name and index parms visible
++      {{- if .Values.systemNameForIndex}}
++      {{  $systemNameNoSpecial := regexReplaceAll "[^A-Za-z0-9-]+" .Values.systemNameForIndex "" }}
++      {{  $systemNameFormatted := $systemNameNoSpecial | lower | trunc 200 }}
++        - name: SYSTEM_NAME_FOR_INDEX
++          value: {{ printf "-%s" $systemNameFormatted | quote }}
++        - name: INDEX_PATTERN
++          value: "{{ .Values.indexNamePrefix }}-{{$systemNameFormatted}}-*"
++        - name: INDEX_NAME
++          value: "{{ .Values.indexNamePrefix }}-{{$systemNameFormatted}}"
++      {{- else }}
++        - name: SYSTEM_NAME_FOR_INDEX
++          value: "unset"
++        - name: INDEX_PATTERN
++          value: "{{ .Values.indexNamePrefix }}-*"
++        - name: INDEX_NAME
++          value: "{{ .Values.indexNamePrefix }}"
++      {{- end }}
+ {{- if .Values.extraVars }}
+ {{ toYaml .Values.extraVars | indent 8 }}
+ {{- end }}
+diff --git a/stable/filebeat/values.yaml b/stable/filebeat/values.yaml
+index b4b766f..3897c82 100644
+--- a/stable/filebeat/values.yaml
++++ b/stable/filebeat/values.yaml
+@@ -68,6 +68,10 @@ extraVars: []
+   #       name: configmap
+   #       key: config.key
+ 
++# Will be used in index name
++systemNameForIndex: ""
++indexNamePrefix: filebeat-%{[agent.version]}
++
+ # Add additional volumes and mounts, for example to read other log files on the host
+ extraVolumes: []
+   # - hostPath:
+diff --git a/stable/logstash/templates/statefulset.yaml b/stable/logstash/templates/statefulset.yaml
+index cca0050..070ef56 100644
+--- a/stable/logstash/templates/statefulset.yaml
++++ b/stable/logstash/templates/statefulset.yaml
+@@ -71,6 +71,16 @@ spec:
+               value: {{ .Values.elasticsearch.host | quote }}
+             - name: ELASTICSEARCH_PORT
+               value: {{ .Values.elasticsearch.port | quote }}
++            ## make system name visible for in setting index.
++          {{- if .Values.systemNameForIndex}}
++          {{  $systemNameNoSpecial := regexReplaceAll "[^A-Za-z0-9-]+" .Values.systemNameForIndex "" }}
++          {{  $systemNameFormatted := $systemNameNoSpecial | lower | trunc 200 }}
++            - name: SYSTEM_NAME_FOR_INDEX
++              value: {{ printf "-%s" $systemNameFormatted | quote }}
++          {{- else }}
++            - name: SYSTEM_NAME_FOR_INDEX
++              value: ""
++          {{- end }}
+             ## Additional env vars
+           {{- range $key, $value := .Values.config }}
+             - name: {{ $key | upper | replace "." "_" }}
+diff --git a/stable/logstash/values.yaml b/stable/logstash/values.yaml
+index 9a452b1..9ba80c9 100644
+--- a/stable/logstash/values.yaml
++++ b/stable/logstash/values.yaml
+@@ -220,6 +220,9 @@ patterns:
+   # main: |-
+   #   TESTING {"foo":.*}$
+ 
++# Will be used in index names
++systemNameForIndex: ""
++
+ ## Custom files that can be referenced by plugins.
+ ## Each YAML heredoc will become located in the logstash home directory under
+ ## the files subdirectory.
+diff --git a/stable/metricbeat/templates/configmap.yaml b/stable/metricbeat/templates/configmap.yaml
+index 4249e7f..9ae276d 100644
+--- a/stable/metricbeat/templates/configmap.yaml
++++ b/stable/metricbeat/templates/configmap.yaml
+@@ -18,7 +18,9 @@ data:
+     BEAT_VER=$($BEAT version | awk '{print $3}')
+ 
+     ADDR=$OUTPUT_ELASTICSEARCH_HOSTS
+-    echo $ADDR
++    ESPATH=$OUTPUT_ELASTICSEARCH_PATH
++
++    echo $ADDR$ESPATH
+ 
+     # Check if this is a map of entries.  If so, we'll only export the template
+     # to the first address
+@@ -28,7 +30,7 @@ data:
+        # Take the first entry in case there are more than one
+        ADDR=${ADDR%%,*}
+     fi
+-    echo $ADDR
++    echo $ADDR$ESPATH
+ 
+     # Check if user has formatted with http:// on front, if not we need to add
+     HTTP='http://'
+@@ -53,7 +55,21 @@ data:
+        # remove the lifecycle section of the yaml, as elasticsearch will choke
+        # on it as oss version does not support ilm.
+        sed -i '/lifecycle/,+3d' /tmp/beat.template.json
+-       curl -v $CURL_G -XPUT -H "Content-Type: application/json" $HTTP$ADDR/_template/$BEAT-$BEAT_VER -d@/tmp/beat.template.json
++
++       # "unset" is the special system name when none has been set through
++       # overrides..  We key on that to know what template name and index pattern to set
++       if [[ $SYSTEM_NAME_FOR_INDEX != unset ]]; then
++          # replace the standard index pattern with one including our system name,
++          # which will match our created indices
++          sed -i "s/$BEAT-$BEAT_VER/$BEAT-$BEAT_VER$SYSTEM_NAME_FOR_INDEX/g" /tmp/beat.template.json
++          # give the template a name with the system name appended.
++          curl -v $CURL_G -XPUT -H "Content-Type: application/json" $HTTP$ADDR$ESPATH/_template/$BEAT-$BEAT_VER$SYSTEM_NAME_FOR_INDEX -d@/tmp/beat.template.json
++       else
++          # apply a higher order to this template in case there are templates with system names
++          # which should be applied first
++          sed -i "s/\"order\": 1/\"order\": 2/g" /tmp/beat.template.json
++          curl -v $CURL_G -XPUT -H "Content-Type: application/json" $HTTP$ADDR$ESPATH/_template/$BEAT-$BEAT_VER -d@/tmp/beat.template.json
++       fi
+     else
+        echo "logstash not configured, not exporting template, should be done for us."
+     fi
+diff --git a/stable/metricbeat/templates/daemonset.yaml b/stable/metricbeat/templates/daemonset.yaml
+index 1ae3a34..947e501 100644
+--- a/stable/metricbeat/templates/daemonset.yaml
++++ b/stable/metricbeat/templates/daemonset.yaml
+@@ -59,7 +59,24 @@ spec:
+       {{- end }}
+       {{- end }}
+       {{- end }}
+-
++      ## make system name and index parms visible
++      {{- if .Values.systemNameForIndex}}
++      {{  $systemNameNoSpecial := regexReplaceAll "[^A-Za-z0-9-]+" .Values.systemNameForIndex "" }}
++      {{  $systemNameFormatted := $systemNameNoSpecial | lower | trunc 200 }}
++        - name: SYSTEM_NAME_FOR_INDEX
++          value: {{ printf "-%s" $systemNameFormatted | quote }}
++        - name: INDEX_PATTERN
++          value: "{{ .Values.indexNamePrefix }}-{{$systemNameFormatted}}-*"
++        - name: INDEX_NAME
++          value: "{{ .Values.indexNamePrefix }}-{{$systemNameFormatted}}"
++      {{- else }}
++        - name: SYSTEM_NAME_FOR_INDEX
++          value: "unset"
++        - name: INDEX_PATTERN
++          value: "{{ .Values.indexNamePrefix }}-*"
++        - name: INDEX_NAME
++          value: "{{ .Values.indexNamePrefix }}"
++      {{- end }}
+       containers:
+       - name: {{ .Chart.Name }}
+         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+@@ -94,6 +111,24 @@ spec:
+       {{- end }}
+       {{- end }}
+       {{- end }}
++      ## make system name and index parms visible
++      {{- if .Values.systemNameForIndex}}
++      {{  $systemNameNoSpecial := regexReplaceAll "[^A-Za-z0-9-]+" .Values.systemNameForIndex "" }}
++      {{  $systemNameFormatted := $systemNameNoSpecial | lower | trunc 200 }}
++        - name: SYSTEM_NAME_FOR_INDEX
++          value: {{ printf "-%s" $systemNameFormatted | quote }}
++        - name: INDEX_PATTERN
++          value: "{{ .Values.indexNamePrefix }}-{{$systemNameFormatted}}-*"
++        - name: INDEX_NAME
++          value: "{{ .Values.indexNamePrefix }}-{{$systemNameFormatted}}"
++      {{- else }}
++        - name: SYSTEM_NAME_FOR_INDEX
++          value: "unset"
++        - name: INDEX_PATTERN
++          value: "{{ .Values.indexNamePrefix }}-*"
++        - name: INDEX_NAME
++          value: "{{ .Values.indexNamePrefix }}"
++      {{- end }}
+ {{- if .Values.extraEnv }}
+ {{ toYaml .Values.extraEnv | indent 8 }}
+ {{- end }}
+diff --git a/stable/metricbeat/templates/deployment.yaml b/stable/metricbeat/templates/deployment.yaml
+index 47ada04..d1d08e3 100644
+--- a/stable/metricbeat/templates/deployment.yaml
++++ b/stable/metricbeat/templates/deployment.yaml
+@@ -55,6 +55,24 @@ spec:
+           valueFrom:
+             fieldRef:
+               fieldPath: spec.nodeName
++      ## make system name and index parms visible
++      {{- if .Values.systemNameForIndex}}
++      {{  $systemNameNoSpecial := regexReplaceAll "[^A-Za-z0-9-]+" .Values.systemNameForIndex "" }}
++      {{  $systemNameFormatted := $systemNameNoSpecial | lower | trunc 200 }}
++        - name: SYSTEM_NAME_FOR_INDEX
++          value: {{ printf "-%s" $systemNameFormatted | quote }}
++        - name: INDEX_PATTERN
++          value: "{{ .Values.indexNamePrefix }}-{{$systemNameFormatted}}-*"
++        - name: INDEX_NAME
++          value: "{{ .Values.indexNamePrefix }}-{{$systemNameFormatted}}"
++      {{- else }}
++        - name: SYSTEM_NAME_FOR_INDEX
++          value: "unset"
++        - name: INDEX_PATTERN
++          value: "{{ .Values.indexNamePrefix }}-*"
++        - name: INDEX_NAME
++          value: "{{ .Values.indexNamePrefix }}"
++      {{- end }}
+ {{- if .Values.extraEnv }}
+ {{ toYaml .Values.extraEnv | indent 8 }}
+ {{- end }}
+diff --git a/stable/metricbeat/values.yaml b/stable/metricbeat/values.yaml
+index c8f758c..b59c428 100644
+--- a/stable/metricbeat/values.yaml
++++ b/stable/metricbeat/values.yaml
+@@ -130,6 +130,10 @@ extraEnv:
+ #  - name: test2
+ #    value: "test2"
+ 
++# Will be used in index name
++systemNameForIndex: ""
++indexNamePrefix: metricbeat-%{[agent.version]}
++
+ # Add additional volumes and mounts, for example to read other log files on the host
+ extraVolumes: []
+   # - hostPath:
+-- 
+1.8.3.1
+
