@@ -10,7 +10,7 @@ Homepage: https://www.starlingx.io
 
 Package: stx-monitor-helm
 Section: libs
-Architecture: any
+Architecture: all
 Depends: ${misc:Depends}, monitor-helm, monitor-helm-elastic
 Description: StarlingX Monitor Armada Helm Charts
  This package contains Armada helm charts for the monitor

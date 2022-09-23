@@ -11,7 +11,7 @@ Homepage: https://www.starlingx.io
 
 Package: monitor-helm
 Section: libs
-Architecture: any
+Architecture: all
 Depends: ${misc:Depends}
 Description: StarlingX Monitor Helm Charts
  This package contains helm charts for the monitor application.
